@@ -1,32 +1,28 @@
-# Deliverable 1: Week 1 Progress Report — Responsibilities, Architecture, Mathematical Formulation & Work Plan
+# Deliverable 1: Week 1 Progress Report & Work Plan
 
-**Project:** TECH5 Collaborative Project — The Student-to-Project Assignment Decision Support System (DSS)  
-**Course:** TECH5 Programming & Application Design, NHH Norwegian School of Economics  
+**Project:** TECH5 Collaborative Project   
+**Team:** 6 (groups 3 and 17)  
 **Repository:** [`mvs242430/TECH5-teams_3_17`](https://github.com/mvs242430/TECH5-teams_3_17)  
 **Milestone:** Week 1 — *Understand, Design, and Divide*  
 
 ---
 
-## 1. Executive Summary & Week 1 Baseline Status
 
-During Week 1, both sub-teams cloned the starter repository, inspected the 3NF SQLite relational schema in [`app/persistence/schema.sql`](../../app/persistence/schema.sql), and reviewed the inter-component contract in [`app/contract/contract.py`](../../app/contract/contract.py).
+## 1. Week 1 Milestones & Progress Checklist
 
-- **Baseline Test Suite Verification:** Both teams executed the automated test suite (`python -m pytest -q`), confirming the expected baseline state of **51 total tests: `36 passed, 15 xfailed`** (3 target `xfail` tasks for Team A and 12 target `xfail` tasks for Team B).
-- **Team A (Visualization & Recommendation — `app/visualization/`):** Reviewed [`MockAssignmentEngine`](../../app/contract/mocks.py) fallback behavior, audited existing student and fixed-assignment CRUD templates, and initiated implementation of the Skill and Project management frames ([Issue #6 / A1.1](https://github.com/mvs242430/TECH5-teams_3_17/issues/6), [Issue #7 / A1.2](https://github.com/mvs242430/TECH5-teams_3_17/issues/7)) and mock solution comparison workflows ([Issue #11 / A2.1](https://github.com/mvs242430/TECH5-teams_3_17/issues/11)).
-- **Team B (Assignment Engine — `app/engine/`):** Formulated the complete Mixed-Integer Linear Programming (MILP) mathematical model ([Issue #17 / B-0](https://github.com/mvs242430/TECH5-teams_3_17/issues/17), [Issue #21 / B2.1](https://github.com/mvs242430/TECH5-teams_3_17/issues/21)), prepared the instructor method approval note, and verified the pre-flight cohort input validation routines in [`app/domain/validation.py`](../../app/domain/validation.py) against [`tests/test_validation.py`](../../tests/test_validation.py).
-
-### Week 1 Milestone Checklist
 - [x] Starter repository cloned and virtual environment verified by all 5 team members ([Issue #1 / 0.1](https://github.com/mvs242430/TECH5-teams_3_17/issues/1)).
-- [x] 3NF SQLite schema ([`schema.sql`](../../app/persistence/schema.sql)) and [`AssignmentEngineContract`](../../app/contract/contract.py) reviewed and agreed upon.
-- [x] Initial test suite verified (`36 passed, 15 xfailed`) including pre-flight input validation tests (`tests/test_validation.py`).
-- [x] Team A scoped and initiated Skill & Project CRUD workflows and mock comparison views against `MockAssignmentEngine`.
+- [x] Reviewed SQLite 3NF schema ([`schema.sql`](../../app/persistence/schema.sql)) and component contract ([`AssignmentEngineContract`](../../app/contract/contract.py)).
+- [x] Ran automated test suite and verified baseline state of 51 tests (`36 passed, 15 xfailed`).
+- [x] Created onboarding documentation with UML class diagram, 3NF schema diagram, component diagram, and sequence diagram (see [`developer_onboarding_guide.md`](../team_related/developer_onboarding_guide.md)).
+- [x] Established 3-week project work plan and allocated role responsibilities across all 5 team members.
+- [x] Created and mapped 37 atomic GitHub issues from tasks allocated to each member.
 - [x] Team B completed the MILP mathematical formulation, multi-strategy objectives, and fairness/efficiency indicator definitions.
 
 ---
 
 ## 2. Team Divisions & Role Responsibilities
 
-The 5-person team is divided into two decoupled component sub-teams following the **Single Responsibility Principle**: closely coupled tasks (e.g., data forms + input validation, or MILP formulation + integer cuts) are assigned to the same specialist to prevent merge conflicts.
+The 5-person team is divided into two decoupled component sub-teams following the **Single Responsibility Principle**: closely coupled tasks (e.g., data forms + input validation, or MILP formulation + integer cuts) are assigned to the same specialist to prevent merge conflicts. *(Detailed task breakdowns and 37 atomic GitHub issue allocations across all three weeks are cataloged in the [Appendix](#appendix-three-week-work-plan--github-issue-allocation).)*
 
 | Sub-Team | Member | Role Title | Primary Codebase Scope | Target `xfail` Tests Owned | Deliverable Lead |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -37,72 +33,10 @@ The 5-person team is divided into two decoupled component sub-teams following th
 | **Team B**<br>*(Assignment Engine)* | **Member B3** | **Engine Orchestration, Diagnostics & Robustness Specialist** | [`app/engine/solvers.py`](../../app/engine/solvers.py) (`AssignmentEngine.execute_run`), [`app/domain/validation.py`](../../app/domain/validation.py), [`tests/test_edge_cases.py`](../../tests/test_edge_cases.py) | 7 solver edge cases in `test_edge_cases.py` (Cases 1–4, 13–15) | **D2** (Working App),<br>**D4** (Contract Spec),<br>**D7** (Testing Evidence) |
 | **Shared** | **All** | **Full-Team Integration & QA** | End-to-end verification, scenario testing, reflection | Full suite (`51 passed, 0 xfailed`) | **D9** (Team Reflection) |
 
+Details in Appendix of this report or on GitHub.
 ---
 
-## 3. Three-Week Work Plan & GitHub Issue Allocation
-
-Every task is tracked as an atomic GitHub issue on [`mvs242430/TECH5-teams_3_17/issues`](https://github.com/mvs242430/TECH5-teams_3_17/issues) with explicit file boundaries, verification steps, and "Done when" criteria (`S` $\le 1\text{h}$, `M` $\le 0.5\text{d}$, `L` $\le 1\text{d}$).
-
-### 3.1 Epic 0 — Foundation & Repository Setup (Week 1)
-
-| GitHub Issue | Code | Task Summary | Target Files | Owner | Week | Size |
-| :--- | :--- | :--- | :--- | :---: | :---: | :---: |
-| [Issue #1](https://github.com/mvs242430/TECH5-teams_3_17/issues/1) | **0.1** | Set up local environment and verify `36 passed, 15 xfailed` | Local `.venv` | All | W1 | S |
-| [Issue #2](https://github.com/mvs242430/TECH5-teams_3_17/issues/2) | **0.2** | Create GitHub project board, labels, PR template, branch rules | `.github/` | A1 | W1 | S |
-| [Issue #3](https://github.com/mvs242430/TECH5-teams_3_17/issues/3) | **0.3** | Add `pulp` MILP solver dependency (**unblocks Team B**) | `requirements.txt` | B2 | W1 | S |
-| [Issue #4](https://github.com/mvs242430/TECH5-teams_3_17/issues/4) | **0.4** | Align test counts (51 total: 36 pass, 15 xfail) and template names in docs | `README.md`, `developer_onboarding_guide.md` | A1 | W1 | S |
-| [Issue #5](https://github.com/mvs242430/TECH5-teams_3_17/issues/5) | **0.5** | Split `AssignmentStrategy` into `app/engine/strategies.py` to prevent B2/B3 merge conflicts | `app/engine/strategies.py`, `app/engine/solvers.py` | B3 | W1 | M |
-
-### 3.2 Team A — Visualization & Recommendation (`app/visualization/`)
-
-| GitHub Issue | Code | Task Summary | Target Files | Owner | Week | Size |
-| :--- | :--- | :--- | :--- | :---: | :---: | :---: |
-| [Issue #6](https://github.com/mvs242430/TECH5-teams_3_17/issues/6) | **A1.1** | Skills CRUD: create & delete skills with RBAC and in-use protection | `routes.py`, `skills.html`, `test_visualization_component.py` | A1 | W1 | M |
-| [Issue #7](https://github.com/mvs242430/TECH5-teams_3_17/issues/7) | **A1.2** | Projects CRUD: create, edit, delete projects with dynamic skill requirements matrix | `routes.py`, `project_form.html`, `projects.html`, `test_visualization_component.py` | A1 | W1–2 | L |
-| [Issue #8](https://github.com/mvs242430/TECH5-teams_3_17/issues/8) | **A1.3** | Friendly UI validation messages for malformed cohort/capacity inputs (8 cases) | `routes.py`, `student_form.html`, `project_form.html`, `test_visualization_component.py` | A1 | W2 | M |
-| [Issue #9](https://github.com/mvs242430/TECH5-teams_3_17/issues/9) | **A1.4** | **Deliverable 5:** 3NF Database & SQL documentation with analytical query results | `docs/database_design.md`, `app/persistence/queries.sql` | A1 (+B1) | W2 | M |
-| [Issue #10](https://github.com/mvs242430/TECH5-teams_3_17/issues/10) | **A1.5** | **Deliverable 1:** Progress Reports 1 & 2 | `docs/reports/` | A1 (+B2) | W1, W2 | S |
-| [Issue #11](https://github.com/mvs242430/TECH5-teams_3_17/issues/11) | **A2.1** | Side-by-side `/compare` page: metric deltas ($\Delta\bar{\sigma}, \Delta\bar{r}, \Delta G$) & student movement table | `routes.py`, `compare.html`, `test_visualization_component.py` | A2 | W1–2 | L |
-| [Issue #12](https://github.com/mvs242430/TECH5-teams_3_17/issues/12) | **A2.2** | Recommendation view: explicitly separate empirical facts (evidence) from policy advice | `recommendations.html`, `run_detail.html` | A2 | W2 | M |
-| [Issue #13](https://github.com/mvs242430/TECH5-teams_3_17/issues/13) | **A2.3** | Interactive "Pin Lock & Re-run" workflow preserving strategy and highlighting changes | `routes.py`, `solution_detail.html` | A2 | W2 | M |
-| [Issue #14](https://github.com/mvs242430/TECH5-teams_3_17/issues/14) | **A2.4** | Role-Based Access Control (RBAC) audit ensuring `Student Viewer` cannot mutate state | `auth.py`, `routes.py`, templates, tests | A2 | W3 | M |
-| [Issue #15](https://github.com/mvs242430/TECH5-teams_3_17/issues/15) | **A2.5** | **Deliverable 3:** Architecture & design documentation | `docs/architecture.md` | A2 (+B3) | W1–3 | M |
-| [Issue #16](https://github.com/mvs242430/TECH5-teams_3_17/issues/16) | **A2.6** | **Deliverable 8:** Reproducible demonstration script across the 4 mandatory scenarios | `docs/reproducible_demonstration.md` | A2 (+B2) | W3 | L |
-
-### 3.3 Team B — Assignment Engine (`app/engine/`)
-
-| GitHub Issue | Code | Task Summary | Target Files | Owner | Week | Size |
-| :--- | :--- | :--- | :--- | :---: | :---: | :---: |
-| [Issue #17](https://github.com/mvs242430/TECH5-teams_3_17/issues/17) | **B-0** | Formal MILP method proposal & instructor approval submission | `docs/analytical_note_template_filled.md` / `docs/method_proposal.md` | B2 | W1 | M |
-| [Issue #18](https://github.com/mvs242430/TECH5-teams_3_17/issues/18) | **B1.1** | Implement `calculate_assignment_skill_fit` ($\sigma_{s,p}$) and `calculate_gini` ($G$) | `app/engine/metrics.py`, `tests/test_metrics.py` | B1 | W1 | M |
-| [Issue #19](https://github.com/mvs242430/TECH5-teams_3_17/issues/19) | **B1.2** | Implement `compute_solution_indicators` (feasibility, efficiency, fairness, capacity) | `app/engine/metrics.py`, `tests/test_metrics.py` | B1 | W2 | L |
-| [Issue #20](https://github.com/mvs242430/TECH5-teams_3_17/issues/20) | **B1.3** | Implement `compare_two_solutions` returning exact delta keys and trade-off summaries | `app/engine/metrics.py`, `tests/test_metrics.py` | B1 | W2 | M |
-| [Issue #21](https://github.com/mvs242430/TECH5-teams_3_17/issues/21) | **B2.1** | Build base PuLP MILP model with binary variables $x_{s,p}$ and hard constraints | `app/engine/strategies.py`, `tests/test_solvers.py` | B2 | W2 | L |
-| [Issue #22](https://github.com/mvs242430/TECH5-teams_3_17/issues/22) | **B2.2** | Implement 3 concrete strategy subclasses (`PREFERENCE`, `SKILL_FIT`, `BALANCED`) | `app/engine/strategies.py`, `tests/test_solvers.py` | B2 | W2 | L |
-| [Issue #23](https://github.com/mvs242430/TECH5-teams_3_17/issues/23) | **B2.3** | Implement sequential integer no-good cuts for distinct Pareto alternatives | `app/engine/strategies.py`, `tests/test_solvers.py` | B2 | W2 | M |
-| [Issue #24](https://github.com/mvs242430/TECH5-teams_3_17/issues/24) | **B2.4+B1.4** | **Deliverable 6:** Complete Analytical Note & Mathematical Formulation | `docs/analytical_note_template_filled.md` | B2, B1, B3 | W3 | M |
-| [Issue #25](https://github.com/mvs242430/TECH5-teams_3_17/issues/25) | **B3.1** | Implement `AssignmentEngine.execute_run` orchestrating validation, solver cuts, metrics & DB persistence | `app/engine/solvers.py` | B3 | W1–2 | L |
-| [Issue #26](https://github.com/mvs242430/TECH5-teams_3_17/issues/26) | **B3.2** | Update legacy tests expecting `NotImplementedError` once real engine is active | `tests/test_solvers.py`, `test_contract_and_engine.py`, `test_component_integration.py` | B3 | W2 | M |
-| [Issue #27](https://github.com/mvs242430/TECH5-teams_3_17/issues/27) | **B3.3** | Human-readable solver diagnostics & root-cause infeasibility explanations | `app/engine/solvers.py`, `app/domain/validation.py` | B3 | W2–3 | M |
-| [Issue #28](https://github.com/mvs242430/TECH5-teams_3_17/issues/28) | **B3.4** | Resolve and activate all 7 solver edge-case tests (Cases 1, 2, 3, 4, 13, 14, 15) | `tests/test_edge_cases.py`, `app/engine/` | B3 (+B1, B2) | W2–3 | L |
-| [Issue #29](https://github.com/mvs242430/TECH5-teams_3_17/issues/29) | **B3.5** | **Deliverable 4:** Internal Component Contract specification | `docs/internal_component_contract.md` | B3 (+A1) | W1–2 | M |
-| [Issue #30](https://github.com/mvs242430/TECH5-teams_3_17/issues/30) | **B3.6** | **Deliverable 7:** Testing, quality, and edge-case evidence report | `docs/testing_and_quality.md` | B3 (+A1, B1) | W3 | M |
-
-### 3.4 Shared Cross-Team Integration & Release (Weeks 2–3)
-
-| GitHub Issue | Code | Task Summary | Target Files | Owner | Week | Size |
-| :--- | :--- | :--- | :--- | :---: | :---: | :---: |
-| [Issue #31](https://github.com/mvs242430/TECH5-teams_3_17/issues/31) | **X1** | Swap `MockAssignmentEngine` for real `AssignmentEngine` across UI routes | `app/visualization/routes.py` | A2 + B3 | W2 | M |
-| [Issue #32](https://github.com/mvs242430/TECH5-teams_3_17/issues/32) | **X2** | Walk through all demo scenarios including infeasible & malformed cohorts | `app/samples/demo_data.py` | A1 + B3 | W3 | M |
-| [Issue #33](https://github.com/mvs242430/TECH5-teams_3_17/issues/33) | **X3** | Full end-to-end integration test without mock fallback | `tests/test_component_integration.py` | A1 | W3 | M |
-| [Issue #34](https://github.com/mvs242430/TECH5-teams_3_17/issues/34) | **X4** | Remove all starter template placeholders (`Starter Carcass`, `TODO (Team...)`) | `app/` | A2 | W3 | S |
-| [Issue #35](https://github.com/mvs242430/TECH5-teams_3_17/issues/35) | **X5** | **Deliverable 9:** Team reflection on collaboration, Git, AI governance, and SDLC | `docs/team_reflection_and_rubric.md` | All (B3 leads) | W3 | M |
-| [Issue #36](https://github.com/mvs242430/TECH5-teams_3_17/issues/36) | **X6** | Compile Git/PR review evidence and commit history audit | `docs/git_evidence.md` | A1 | W3 | S |
-| [Issue #37](https://github.com/mvs242430/TECH5-teams_3_17/issues/37) | **X7** | Final release verification (`51 passed, 0 xfailed`) and `v1.0` Git tag | Repository-wide | All | W3 | S |
-
----
-
-## 4. Execution Order & Cross-Team Synchronization
+## 3. Execution Order & Cross-Team Synchronization
 
 Because `AssignmentEngineContract` decouples the web layer from the solver layer, **Team A and Team B work in parallel throughout Week 1 and early Week 2** without blocking each other.
 
@@ -161,7 +95,7 @@ flowchart TD
     X1_Swap --> X_Verify
 ```
 
-### Critical Path & Synchronization Gates
+### 3.1 Critical Path & Synchronization Gates
 1. **Critical Path:**
    - *Solver track:* `[#3 / 0.3] Add PuLP` $\rightarrow$ `[#5 / 0.5] Split strategies.py` $\rightarrow$ `[#21 / B2.1] MILP rules` $\rightarrow$ `[#22 / B2.2] 3 Strategies` $\rightarrow$ `[#23 / B2.3] No-Good Cuts` $\rightarrow$ `[#25 / B3.1] execute_run` $\rightarrow$ `[#28 / B3.4] 7 Edge Cases`.
    - *Metrics track:* `[#18 / B1.1] Skill-fit & Gini` $\rightarrow$ `[#19 / B1.2] Solution Indicators` $\rightarrow$ `[#20 / B1.3] Compare Two Solutions` $\rightarrow$ `[#31 / X1] Live Compare Page`.
@@ -171,9 +105,9 @@ flowchart TD
 
 ---
 
-## 5. System Architecture & UML Diagrams
+## 4. System Architecture & UML Diagrams
 
-### 5.1 UML Component Architecture Diagram (with GitHub Issue Mapping)
+### 4.1 UML Component Architecture Diagram (with GitHub Issue Mapping)
 
 The application is an **in-process, two-component modular monolith** running within a single Python runtime. Component A (`app/visualization`) and Component B (`app/engine`) never communicate over HTTP/REST; they interact strictly through [`AssignmentEngineContract`](../../app/contract/contract.py) using strongly-typed Data Transfer Objects (`RunRequest`, `ValidationOutcome`, `RunComparison`).
 
@@ -248,9 +182,9 @@ flowchart TD
 
 ---
 
-### 5.2 UML Entity-Relationship Diagram (Relational 3NF Database)
+### 4.2 UML Entity-Relationship Diagram (Relational 3NF Database)
 
-The persistence layer ([`app/persistence/schema.sql`](../../app/persistence/schema.sql)) enforces **Third Normal Form (3NF)** across 10 relational tables with `PRAGMA foreign_keys = ON`, `ON DELETE CASCADE` referential integrity, domain `CHECK` constraints (`min_capacity <= max_capacity`, `level >= 1`, `rank >= 1`), and composite uniqueness constraints (`uq_student_rank`, `uq_run_alternative`, `uq_solution_student`).
+Inspecting the schema.
 
 ```mermaid
 erDiagram
@@ -337,7 +271,7 @@ erDiagram
 
 ---
 
-## 6. Onboarding Documentation & AI/QA Engineering Governance
+## 5. Onboarding Documentation & AI/QA Engineering Governance
 
 To ensure all 5 team members can contribute effectively with consistent code quality and zero regression risk, we authored a comprehensive onboarding and governance suite:
 
@@ -352,11 +286,11 @@ To ensure all 5 team members can contribute effectively with consistent code qua
 
 ---
 
-## 7. Mathematical Formulation & MILP Methodology Proposition
+## 6. Mathematical Formulation & MILP Methodology Proposition
 
 *(Full mathematical derivation and code mapping are maintained in [`docs/analytical_note_template_filled.md`](https://github.com/mvs242430/TECH5-teams_3_17/blob/math-formulation/docs/analytical_note_template_filled.md) on branch `math-formulation`.)*
 
-### 7.1 Proposed Method & Arguments for MILP (PuLP / CBC)
+### 6.1 Proposed Method & Arguments for MILP (PuLP / CBC)
 
 We propose **Mixed-Integer Linear Programming (MILP)** modeled in Python via **PuLP** and solved using the bundled open-source **CBC (Coin-or branch and cut)** solver.
 
@@ -374,7 +308,7 @@ We propose **Mixed-Integer Linear Programming (MILP)** modeled in Python via **P
 
 ---
 
-### 7.2 Sets, Parameters & Decision Variables
+### 6.2 Sets, Parameters & Decision Variables
 
 - **Index Sets:** Students $S$ ($|S|=n$), Projects $P$ ($|P|=m$), Skills $K$, Fixed Locks $F \subseteq S \times P$, Project Required Skills $R_p = \{k \in K : \text{req}_{p,k} \ge 1\}$, Mandatory Skills $M_p = \{k \in R_p : m_{p,k} = 1\}$, and Eligible Pairs:
   $$E = \{(s,p) \in S \times P : \text{skill}_{s,k} \ge \text{req}_{p,k} \;\; \forall k \in M_p\}$$
@@ -387,7 +321,7 @@ We propose **Mixed-Integer Linear Programming (MILP)** modeled in Python via **P
 
 ---
 
-### 7.3 Hard Constraints & Multi-Strategy Objectives
+### 6.3 Hard Constraints & Feasibility Bounds
 
 All three optimization strategies share the five hard constraint families:
 
@@ -398,7 +332,8 @@ All three optimization strategies share the five hard constraint families:
 5. **Balas–Jeroslow No-Good Cuts (for $K$ Distinct Alternatives):** For each previously found allocation $A^{(j)} \in \mathcal{A}$, require at least one student to be assigned differently:
    $$\sum_{(s,p) \in A^{(j)}} x_{s,p} \le n - 1 \quad \forall A^{(j)} \in \mathcal{A}$$
 
-#### Three Concrete Strategy Objectives (Strategy Pattern)
+### 6.4 Concrete Optimization Objectives (Strategy Pattern)
+
 - **1. Preference-Oriented (`PREFERENCE`):** Maximizes total student preference satisfaction with a provably non-overriding skill-fit tie-breaker $\varepsilon_1 = \frac{1}{2n(\rho-1)}$:
   $$\max Z_{\text{pref}} = \sum_{s \in S}\sum_{p \in P} \left(w^{\text{pref}}_{s,p} + \varepsilon_1 \sigma_{s,p}\right) x_{s,p}$$
 - **2. Skill-Fit-Oriented (`SKILL_FIT`):** Maximizes cohort skill qualification with preference tie-breaker $\varepsilon_2 = 10^{-4}$:
@@ -406,10 +341,76 @@ All three optimization strategies share the five hard constraint families:
 - **3. Balanced Trade-Off (`BALANCED`):** Pareto-efficient convex scalarization ($\lambda = 0.5$) across normalized $[0,1]$ scales:
   $$\max Z_{\text{balanced}} = \sum_{s \in S}\sum_{p \in P} \left[\lambda\, w^{\text{pref}}_{s,p} + (1-\lambda)\,\sigma_{s,p}\right] x_{s,p}$$
 
-#### Core Evaluation Indicators (`app/engine/metrics.py`)
+### 6.5 Core Evaluation Indicators (Fairness & Efficiency Metrics)
+
 Every generated solution is evaluated post-solve across four dimensions:
 - **Feasibility:** Independent verification of constraints 1–4.
 - **Efficiency:** Mean Skill-Fit $\bar{\sigma} = \frac{1}{n}\sum_{s,p} \sigma_{s,p} x_{s,p}$, Mean Preference Rank $\bar{r} = \frac{1}{n}\sum_{s,p} r_{s,p} x_{s,p}$, and unmet soft requirement count.
 - **Fairness:** Rank histogram, unranked count $U$, worst assigned rank $r_{\max}$, rank variance $\operatorname{Var}(r)$, and the **Gini Coefficient of Assigned Ranks**:
   $$G = \frac{\sum_{i=1}^n \sum_{j=1}^n |r_i - r_j|}{2 n \sum_{i=1}^n r_i} \in \left[0, \frac{n-1}{n}\right]$$
 - **Capacity Utilization:** Per-project ($\text{Util}_p = \frac{n_p}{u_p}\times 100\%$) and aggregate cohort utilization.
+
+---
+
+## Appendix: Three-Week Work Plan & GitHub Issue Allocation
+
+*(Detailed task breakdowns and atomic issue allocations across all 3 weeks are cataloged here for reference. See also [`docs/team_related/team_task_allocation_plan.md`](../team_related/team_task_allocation_plan.md).)*
+
+Every task is tracked as an atomic GitHub issue on [`mvs242430/TECH5-teams_3_17/issues`](https://github.com/mvs242430/TECH5-teams_3_17/issues) with explicit file boundaries, verification steps, and "Done when" criteria (`S` $\le 1\text{h}$, `M` $\le 0.5\text{d}$, `L` $\le 1\text{d}$).
+
+### A.1 Epic 0 — Foundation & Repository Setup (Week 1)
+
+| GitHub Issue | Code | Task Summary | Target Files | Owner | Week | Size |
+| :--- | :--- | :--- | :--- | :--- | :---: | :---: |
+| [Issue #1](https://github.com/mvs242430/TECH5-teams_3_17/issues/1) | **0.1** | Set up local environment and verify `36 passed, 15 xfailed` | Local `.venv` | All | W1 | S |
+| [Issue #2](https://github.com/mvs242430/TECH5-teams_3_17/issues/2) | **0.2** | Create GitHub project board, labels, PR template, branch rules | `.github/` | A1 | W1 | S |
+| [Issue #3](https://github.com/mvs242430/TECH5-teams_3_17/issues/3) | **0.3** | Add `pulp` MILP solver dependency (**unblocks Team B**) | `requirements.txt` | B2 | W1 | S |
+| [Issue #4](https://github.com/mvs242430/TECH5-teams_3_17/issues/4) | **0.4** | Align test counts (51 total: 36 pass, 15 xfail) and template names in docs | `README.md`, `developer_onboarding_guide.md` | A1 | W1 | S |
+| [Issue #5](https://github.com/mvs242430/TECH5-teams_3_17/issues/5) | **0.5** | Split `AssignmentStrategy` into `app/engine/strategies.py` to prevent B2/B3 merge conflicts | `app/engine/strategies.py`, `app/engine/solvers.py` | B3 | W1 | M |
+
+### A.2 Team A — Visualization & Recommendation (`app/visualization/`)
+
+| GitHub Issue | Code | Task Summary | Target Files | Owner | Week | Size |
+| :--- | :--- | :--- | :--- | :--- | :---: | :---: |
+| [Issue #6](https://github.com/mvs242430/TECH5-teams_3_17/issues/6) | **A1.1** | Skills CRUD: create & delete skills with RBAC and in-use protection | `routes.py`, `skills.html`, `test_visualization_component.py` | A1 | W1 | M |
+| [Issue #7](https://github.com/mvs242430/TECH5-teams_3_17/issues/7) | **A1.2** | Projects CRUD: create, edit, delete projects with dynamic skill requirements matrix | `routes.py`, `project_form.html`, `projects.html`, `test_visualization_component.py` | A1 | W1–2 | L |
+| [Issue #8](https://github.com/mvs242430/TECH5-teams_3_17/issues/8) | **A1.3** | Friendly UI validation messages for malformed cohort/capacity inputs (8 cases) | `routes.py`, `student_form.html`, `project_form.html`, `test_visualization_component.py` | A1 | W2 | M |
+| [Issue #9](https://github.com/mvs242430/TECH5-teams_3_17/issues/9) | **A1.4** | **Deliverable 5:** 3NF Database & SQL documentation with analytical query results | `docs/database_design.md`, `app/persistence/queries.sql` | A1 (+B1) | W2 | M |
+| [Issue #10](https://github.com/mvs242430/TECH5-teams_3_17/issues/10) | **A1.5** | **Deliverable 1:** Progress Reports 1 & 2 | `docs/reports/` | A1 (+B2) | W1, W2 | S |
+| [Issue #11](https://github.com/mvs242430/TECH5-teams_3_17/issues/11) | **A2.1** | Side-by-side `/compare` page: metric deltas ($\Delta\bar{\sigma}, \Delta\bar{r}, \Delta G$) & student movement table | `routes.py`, `compare.html`, `test_visualization_component.py` | A2 | W1–2 | L |
+| [Issue #12](https://github.com/mvs242430/TECH5-teams_3_17/issues/12) | **A2.2** | Recommendation view: explicitly separate empirical facts (evidence) from policy advice | `recommendations.html`, `run_detail.html` | A2 | W2 | M |
+| [Issue #13](https://github.com/mvs242430/TECH5-teams_3_17/issues/13) | **A2.3** | Interactive "Pin Lock & Re-run" workflow preserving strategy and highlighting changes | `routes.py`, `solution_detail.html` | A2 | W2 | M |
+| [Issue #14](https://github.com/mvs242430/TECH5-teams_3_17/issues/14) | **A2.4** | Role-Based Access Control (RBAC) audit ensuring `Student Viewer` cannot mutate state | `auth.py`, `routes.py`, templates, tests | A2 | W3 | M |
+| [Issue #15](https://github.com/mvs242430/TECH5-teams_3_17/issues/15) | **A2.5** | **Deliverable 3:** Architecture & design documentation | `docs/architecture.md` | A2 (+B3) | W1–3 | M |
+| [Issue #16](https://github.com/mvs242430/TECH5-teams_3_17/issues/16) | **A2.6** | **Deliverable 8:** Reproducible demonstration script across the 4 mandatory scenarios | `docs/reproducible_demonstration.md` | A2 (+B2) | W3 | L |
+
+### A.3 Team B — Assignment Engine (`app/engine/`)
+
+| GitHub Issue | Code | Task Summary | Target Files | Owner | Week | Size |
+| :--- | :--- | :--- | :--- | :--- | :---: | :---: |
+| [Issue #17](https://github.com/mvs242430/TECH5-teams_3_17/issues/17) | **B-0** | Formal MILP method proposal & instructor approval submission | `docs/analytical_note_template_filled.md` / `docs/method_proposal.md` | B2 | W1 | M |
+| [Issue #18](https://github.com/mvs242430/TECH5-teams_3_17/issues/18) | **B1.1** | Implement `calculate_assignment_skill_fit` ($\sigma_{s,p}$) and `calculate_gini` ($G$) | `app/engine/metrics.py`, `tests/test_metrics.py` | B1 | W1 | M |
+| [Issue #19](https://github.com/mvs242430/TECH5-teams_3_17/issues/19) | **B1.2** | Implement `compute_solution_indicators` (feasibility, efficiency, fairness, capacity) | `app/engine/metrics.py`, `tests/test_metrics.py` | B1 | W2 | L |
+| [Issue #20](https://github.com/mvs242430/TECH5-teams_3_17/issues/20) | **B1.3** | Implement `compare_two_solutions` returning exact delta keys and trade-off summaries | `app/engine/metrics.py`, `tests/test_metrics.py` | B1 | W2 | M |
+| [Issue #21](https://github.com/mvs242430/TECH5-teams_3_17/issues/21) | **B2.1** | Build base PuLP MILP model with binary variables $x_{s,p}$ and hard constraints | `app/engine/strategies.py`, `tests/test_solvers.py` | B2 | W2 | L |
+| [Issue #22](https://github.com/mvs242430/TECH5-teams_3_17/issues/22) | **B2.2** | Implement 3 concrete strategy subclasses (`PREFERENCE`, `SKILL_FIT`, `BALANCED`) | `app/engine/strategies.py`, `tests/test_solvers.py` | B2 | W2 | L |
+| [Issue #23](https://github.com/mvs242430/TECH5-teams_3_17/issues/23) | **B2.3** | Implement sequential integer no-good cuts for distinct Pareto alternatives | `app/engine/strategies.py`, `tests/test_solvers.py` | B2 | W2 | M |
+| [Issue #24](https://github.com/mvs242430/TECH5-teams_3_17/issues/24) | **B2.4+B1.4** | **Deliverable 6:** Complete Analytical Note & Mathematical Formulation | `docs/analytical_note_template_filled.md` | B2, B1, B3 | W3 | M |
+| [Issue #25](https://github.com/mvs242430/TECH5-teams_3_17/issues/25) | **B3.1** | Implement `AssignmentEngine.execute_run` orchestrating validation, solver cuts, metrics & DB persistence | `app/engine/solvers.py` | B3 | W1–2 | L |
+| [Issue #26](https://github.com/mvs242430/TECH5-teams_3_17/issues/26) | **B3.2** | Update legacy tests expecting `NotImplementedError` once real engine is active | `tests/test_solvers.py`, `test_contract_and_engine.py`, `test_component_integration.py` | B3 | W2 | M |
+| [Issue #27](https://github.com/mvs242430/TECH5-teams_3_17/issues/27) | **B3.3** | Human-readable solver diagnostics & root-cause infeasibility explanations | `app/engine/solvers.py`, `app/domain/validation.py` | B3 | W2–3 | M |
+| [Issue #28](https://github.com/mvs242430/TECH5-teams_3_17/issues/28) | **B3.4** | Resolve and activate all 7 solver edge-case tests (Cases 1, 2, 3, 4, 13, 14, 15) | `tests/test_edge_cases.py`, `app/engine/` | B3 (+B1, B2) | W2–3 | L |
+| [Issue #29](https://github.com/mvs242430/TECH5-teams_3_17/issues/29) | **B3.5** | **Deliverable 4:** Internal Component Contract specification | `docs/internal_component_contract.md` | B3 (+A1) | W1–2 | M |
+| [Issue #30](https://github.com/mvs242430/TECH5-teams_3_17/issues/30) | **B3.6** | **Deliverable 7:** Testing, quality, and edge-case evidence report | `docs/testing_and_quality.md` | B3 (+A1, B1) | W3 | M |
+
+### A.4 Shared Cross-Team Integration & Release (Weeks 2–3)
+
+| GitHub Issue | Code | Task Summary | Target Files | Owner | Week | Size |
+| :--- | :--- | :--- | :--- | :--- | :---: | :---: |
+| [Issue #31](https://github.com/mvs242430/TECH5-teams_3_17/issues/31) | **X1** | Swap `MockAssignmentEngine` for real `AssignmentEngine` across UI routes | `app/visualization/routes.py` | A2 + B3 | W2 | M |
+| [Issue #32](https://github.com/mvs242430/TECH5-teams_3_17/issues/32) | **X2** | Walk through all demo scenarios including infeasible & malformed cohorts | `app/samples/demo_data.py` | A1 + B3 | W3 | M |
+| [Issue #33](https://github.com/mvs242430/TECH5-teams_3_17/issues/33) | **X3** | Full end-to-end integration test without mock fallback | `tests/test_component_integration.py` | A1 | W3 | M |
+| [Issue #34](https://github.com/mvs242430/TECH5-teams_3_17/issues/34) | **X4** | Remove all starter template placeholders (`Starter Carcass`, `TODO (Team...)`) | `app/` | A2 | W3 | S |
+| [Issue #35](https://github.com/mvs242430/TECH5-teams_3_17/issues/35) | **X5** | **Deliverable 9:** Team reflection on collaboration, Git, AI governance, and SDLC | `docs/team_reflection_and_rubric.md` | All (B3 leads) | W3 | M |
+| [Issue #36](https://github.com/mvs242430/TECH5-teams_3_17/issues/36) | **X6** | Compile Git/PR review evidence and commit history audit | `docs/git_evidence.md` | A1 | W3 | S |
+| [Issue #37](https://github.com/mvs242430/TECH5-teams_3_17/issues/37) | **X7** | Final release verification (`51 passed, 0 xfailed`) and `v1.0` Git tag | Repository-wide | All | W3 | S |
