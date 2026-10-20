@@ -3,6 +3,9 @@
 **Project:** TECH5 Collaborative Project   
 **Team:** 6 (groups 3 and 17)  
 **Repository:** [`mvs242430/TECH5-teams_3_17`](https://github.com/mvs242430/TECH5-teams_3_17)  
+**Onboarding:** [`developer onboarding guide`](https://github.com/mvs242430/TECH5-teams_3_17/blob/docs/onboarding-and-issues/docs/team_related/developer_onboarding_guide.md)  
+**Task allocations:** [`team task allocation`](https://github.com/mvs242430/TECH5-teams_3_17/blob/docs/onboarding-and-issues/docs/team_related/team_task_allocation_plan.md)  
+**Issues**: [`GitHub issues`](https://github.com/mvs242430/TECH5-teams_3_17/issues)  
 **Milestone:** Week 1 — *Understand, Design, and Divide*  
 
 ---
@@ -33,7 +36,6 @@ The 5-person team is divided into two decoupled component sub-teams following th
 | **Team B**<br>*(Assignment Engine)* | **Member B3** | **Engine Orchestration, Diagnostics & Robustness Specialist** | [`app/engine/solvers.py`](../../app/engine/solvers.py) (`AssignmentEngine.execute_run`), [`app/domain/validation.py`](../../app/domain/validation.py), [`tests/test_edge_cases.py`](../../tests/test_edge_cases.py) | 7 solver edge cases in `test_edge_cases.py` (Cases 1–4, 13–15) | **D2** (Working App),<br>**D4** (Contract Spec),<br>**D7** (Testing Evidence) |
 | **Shared** | **All** | **Full-Team Integration & QA** | End-to-end verification, scenario testing, reflection | Full suite (`51 passed, 0 xfailed`) | **D9** (Team Reflection) |
 
-Details in Appendix of this report or on GitHub.
 ---
 
 ## 3. Execution Order & Cross-Team Synchronization
@@ -184,7 +186,7 @@ flowchart TD
 
 ### 4.2 UML Entity-Relationship Diagram (Relational 3NF Database)
 
-Inspecting the schema.
+The persistence layer ([`app/persistence/schema.sql`](../../app/persistence/schema.sql)) enforces **Third Normal Form (3NF)** across 10 relational tables with `PRAGMA foreign_keys = ON`, `ON DELETE CASCADE` referential integrity, domain `CHECK` constraints (`min_capacity <= max_capacity`, `level >= 1`, `rank >= 1`), and composite uniqueness constraints (`uq_student_rank`, `uq_run_alternative`, `uq_solution_student`).
 
 ```mermaid
 erDiagram
