@@ -410,26 +410,38 @@ def create_project() -> flask.Response:
     except ValueError:
         min_cap, max_cap = 1, 5
 
-    # Parse requirements list matching ProjectRequirement model
+    # Parse requirements matching project_form.html input names (req_level_ and req_mand_)
     requirements: list[models.ProjectRequirement] = []
     valid_skills = {s.id for s in repositories.SkillRepository().list_all()}
+    
+    levels: dict[str, int] = {}
+    mandatory_flags: dict[str, bool] = {}
+
     for key, val in flask.request.form.items():
-        if key.startswith("skill_") and val:
-            skill_id = key.replace("skill_", "")
+        if key.startswith("req_level_") and val:
+            skill_id = key.replace("req_level_", "")
             if skill_id in valid_skills:
                 try:
                     lvl = int(val)
                     if lvl > 0:
-                        requirements.append(
-                            models.ProjectRequirement(
-                                project_id=p_id,
-                                skill_id=skill_id,
-                                minimum_level=lvl,
-                                is_mandatory=False,
-                            )
-                        )
+                        levels[skill_id] = lvl
                 except ValueError:
                     pass
+        elif key.startswith("req_mand_"):
+            skill_id = key.replace("req_mand_", "")
+            if skill_id in valid_skills:
+                mandatory_flags[skill_id] = True
+
+    for skill_id, min_lvl in levels.items():
+        is_mand = mandatory_flags.get(skill_id, False)
+        requirements.append(
+            models.ProjectRequirement(
+                project_id=p_id,
+                skill_id=skill_id,
+                minimum_level=min_lvl,
+                is_mandatory=is_mand,
+            )
+        )
 
     project = models.Project(
         id=p_id,
@@ -482,23 +494,35 @@ def update_project(project_id: str) -> flask.Response:
 
     requirements: list[models.ProjectRequirement] = []
     valid_skills = {s.id for s in repositories.SkillRepository().list_all()}
+    
+    levels: dict[str, int] = {}
+    mandatory_flags: dict[str, bool] = {}
+
     for key, val in flask.request.form.items():
-        if key.startswith("skill_") and val:
-            skill_id = key.replace("skill_", "")
+        if key.startswith("req_level_") and val:
+            skill_id = key.replace("req_level_", "")
             if skill_id in valid_skills:
                 try:
                     lvl = int(val)
                     if lvl > 0:
-                        requirements.append(
-                            models.ProjectRequirement(
-                                project_id=project_id,
-                                skill_id=skill_id,
-                                minimum_level=lvl,
-                                is_mandatory=False,
-                            )
-                        )
+                        levels[skill_id] = lvl
                 except ValueError:
                     pass
+        elif key.startswith("req_mand_"):
+            skill_id = key.replace("req_mand_", "")
+            if skill_id in valid_skills:
+                mandatory_flags[skill_id] = True
+
+    for skill_id, min_lvl in levels.items():
+        is_mand = mandatory_flags.get(skill_id, False)
+        requirements.append(
+            models.ProjectRequirement(
+                project_id=project_id,
+                skill_id=skill_id,
+                minimum_level=min_lvl,
+                is_mandatory=is_mand,
+            )
+        )
 
     project = models.Project(
         id=project_id,
@@ -550,17 +574,30 @@ def create_skill() -> flask.Response:
         flask.flash("Permission denied.", "danger")
         return flask.redirect(target)
 
-    s_id = flask.request.form.get("id", "").strip()
-    name = flask.request.form.get("display_name", "").strip() or s_id
+    # Grab the fields from the form safely
+    s_id = (
+        flask.request.form.get("id", "").strip() 
+        or flask.request.form.get("skill_id", "").strip()
+    )
+    name = (
+        flask.request.form.get("name", "").strip()
+        or flask.request.form.get("display_name", "").strip()
+        or s_id
+    )
+    description = flask.request.form.get("description", "").strip()
 
     if not s_id:
         flask.flash("Skill ID cannot be empty.", "warning")
         return flask.redirect(target)
 
     try:
-        repositories.SkillRepository().save(
-            models.Skill(id=s_id, display_name=name)
+        # Use exact keyword arguments expected by models.Skill: id, name, description
+        skill = models.Skill(
+            id=s_id,
+            name=name,
+            description=description
         )
+        repositories.SkillRepository().save(skill)
         flask.flash(f"Skill '{name}' ({s_id}) created successfully.", "success")
     except Exception as exc:
         flask.flash(f"Database error while saving skill: {exc}", "danger")
