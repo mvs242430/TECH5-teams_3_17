@@ -112,3 +112,67 @@ Size: S ≤ 1 h · M ≤ half day · L ≤ 1 day. Details of each issue: `docs/t
 2. `grep -rn "xfail\|TODO (Team" app tests` finds nothing.
 3. A teammate who did not write the demo follows `docs/reproducible_demonstration.md` on a fresh clone and gets the same results.
 4. A non-developer completes section 1.4 of the onboarding guide alone in under 30 minutes.
+
+---
+
+## 6. Weekly Delivery Roadmap per Member
+
+```
+┌──────────┬─────────────────────────────┬─────────────────────────────┬─────────────────────────────┐
+│ Member   │ Week 1                      │ Week 2                      │ Week 3                      │
+├──────────┼─────────────────────────────┼─────────────────────────────┼─────────────────────────────┤
+│ A1       │ Skills & Projects CRUD forms│ Dynamic Requirement Matrix  │ D5 SQL docs & UI error audit│
+│ A2       │ Mock UI flow & RBAC review  │ Side-by-side /compare view  │ D8 Reproducible Demo script │
+│ B1       │ Metric equations & Gini plan│ Skill-fit, Gini & Indicators│ D6 Indicator equations & deltas│
+│ B2       │ Approval proposal & ILP math│ PuLP Solvers & No-Good Cuts │ D6 Formulation & cuts report│
+│ B3       │ Validation tests audit      │ execute_run & persistence   │ 7 edge cases & diagnostics  │
+└──────────┴─────────────────────────────┴─────────────────────────────┴─────────────────────────────┘
+```
+
+---
+
+## 7. Execution Order & Cross-Team Synchronization
+
+```mermaid
+flowchart TD
+    subgraph TeamA_Phase1["Team A (Parallel Start - Uses Mock Engine)"]
+        A1_Start["Member A1: Skill & Project CRUD (Issues A1.1 & A1.2)"]
+        A2_Start["Member A2: Solution Comparison & Recommendations UI (Issues A2.1 & A2.2)"]
+    end
+
+    subgraph TeamB_Phase1["Team B (Parallel Math & Solver Build)"]
+        B1_Start["Member B1: Skill Fit, Gini & Solution Indicators (Issues B1.1 & B1.2)"]
+        B2_Start["Member B2: PuLP ILP Formulation & Strategies (Issues B2.1 & B2.2)"]
+    end
+
+    subgraph TeamB_Phase2["Team B (Integration & Robustness)"]
+        B1_Comp["Member B1: Solution Comparison Function (Issue B1.3)"]
+        B2_Cuts["Member B2: Integer No-Good Cuts (Issue B2.3)"]
+        B3_Eng["Member B3: AssignmentEngine Orchestrator & Diagnostics (Issues B3.1 & B3.2)"]
+    end
+
+    subgraph Final_Integration["Final System Integration & Verification"]
+        Swap["Swap Mock Engine with Real AssignmentEngine in Web UI"]
+        PassAll["Run Full Test Suite: 51/51 PASSED (0 XFAIL)"]
+        DemoDocs["Verify Deliverable 6 & Deliverable 7 Demonstration Walkthrough"]
+    end
+
+    B1_Start --> B1_Comp
+    B2_Start --> B2_Cuts
+    B1_Start --> B3_Eng
+    B2_Start --> B3_Eng
+    B1_Comp --> B3_Eng
+    B2_Cuts --> B3_Eng
+
+    A1_Start --> Swap
+    A2_Start --> Swap
+    B3_Eng --> Swap
+    Swap --> PassAll
+    PassAll --> DemoDocs
+```
+
+### Key Synchronization Gates:
+1. **Gate 1 (End of Week 1):** Team B delivers approved ILP formulation proposal; Team A verifies that Project and Skill forms can seed a test cohort and trigger mock comparisons.
+2. **Gate 2 (Mid-Week 2):** Team B provides working `AssignmentEngine`; Team A performs the **Mock Swap** and verifies that `/compare` displays real solver output with Pareto alternatives.
+3. **Gate 3 (End of Week 3):** Full team conducts the 4-scenario reproducible demonstration walkthrough in a dry-run rehearsal before final submission.
+
