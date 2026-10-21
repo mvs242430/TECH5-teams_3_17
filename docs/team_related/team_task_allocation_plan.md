@@ -1,251 +1,117 @@
-# TECH5 Collaborative Project: Team Task Allocation & Three-Week Milestone Plan
+# TECH5 Collaborative Project: Team Task Allocation & Three-Week Plan
 
-*Approved Master Operational Plan based on the official NHH student-facing challenge brief: **TECH5 Collaborative Project: The Student-to-Project Assignment Challenge**.*
+*Corrected plan. **Detailed instructions for every task (what to build, exact files, step-by-step with the AI agent, prompt to paste, "done when" checks) are in [`issues/`](issues/README.md).** Beginners start with [`onboarding_for_students.md`](onboarding_for_students.md).*
+
+Brief: *TECH5 Collaborative Project: The Student-to-Project Assignment Challenge*. Team A (2 people) builds the **face** (`app/visualization/`), Team B (3 people) builds the **brain** (`app/engine/`). Start state: `36 passed, 15 xfailed`. Finish line: **`51 passed, 0 xfailed`** and all 9 deliverables.
 
 ---
 
-## 1. High-Level Team Sizing & Allocation Strategy
+## 1. Who does what
 
-* **Team A (2 Members):** Visualization and Recommendation Component (`app/visualization`)
-* **Team B (3 Members):** Assignment Engine Component (`app/engine`)
-* **Core Design Rule:** Closely coupled tasks (e.g. data forms + validation, or optimization formulation + integer cuts) are assigned to the **same person** to maintain conceptual integrity and eliminate merge friction.
+| Person | Role | Main files | Deliverable lead |
+|---|---|---|---|
+| **A1** | Data person: skill & project forms, friendly errors | `routes.py` (skills/projects functions), `skills.html`, `project_form.html`, `projects.html` | D1 progress reports, D5 database & SQL |
+| **A2** | Decision person: compare, recommendations, lock & re-run, access, demo | `routes.py` (compare/runs functions), `compare.html`, `recommendations.html`, `solution_detail.html`, `auth.py` | D3 architecture, D8 demo |
+| **B1** | Scores person: skill fit, fairness, comparison numbers | `app/engine/metrics.py` | D6 (indicators part) |
+| **B2** | Optimiser person: maths model, strategies, alternatives, professor approval | `app/engine/strategies.py`, `requirements.txt` | D6 (formulation part) |
+| **B3** | Boss + safety person: run orchestration, diagnostics, edge cases | `app/engine/solvers.py`, `tests/test_edge_cases.py` | D2 working app, D4 contract, D7 testing |
+| **All** | | | D9 team reflection |
 
-| Team | Member | Role Title | Core Focus & Cohesive Tasks | Target Tests | Lead Deliverables |
+Deliverables: D1 progress reports · D2 working app · D3 architecture · D4 component contract · D5 database & SQL · D6 analytical note · D7 testing evidence · D8 reproducible demo · D9 team reflection.
+
+Shared-file rule: A1 and A2 both use `routes.py`, but each edits only their own functions. B2 works in `strategies.py`, B3 in `solvers.py` (made possible by issue 0.5). Pull `main` before every work session.
+
+---
+
+## 2. Corrected issue plan
+
+Size: S ≤ 1 h · M ≤ half day · L ≤ 1 day. Details of each issue: `docs/team_related/issues/<ID>.md`.
+
+### Setup (Week 1)
+
+| ID | What | Where | Owner | Week | Size |
 |---|---|---|---|---|---|
-| **Team A** | **Member A1** | **Data Management & Entity Specialist** | Student, Project, & Skill CRUD intake pipelines, dynamic requirements matrix, input validation | `test_skills_crud_workflow`, `test_projects_crud_workflow` | D1 (Progress Reports), D5 (Database & SQL) |
-| **Team A** | **Member A2** | **Decision Support & UX Specialist** | Solution comparison view, metric delta cards, re-allocation diffs, recommendation presentation, RBAC | `test_compare_solutions_view` | D3 (Architecture), D8 (Reproducible Demo) |
-| **Team B** | **Member B1** | **Analytical Indicators & Fairness Specialist** | Skill fit score $\bar{\sigma}$, Gini coefficient $G$, multidimensional indicators, comparison deltas | `test_gini_calculation`, `test_skill_fit_calculation`, `test_solution_indicators_calculation`, `test_solution_comparison` | D6 (Analytical Note: Indicators & Equations) |
-| **Team B** | **Member B2** | **Optimization & Solvers Specialist** | PuLP ILP formulation, strategy pattern (`Preference`, `SkillFit`, `Balanced`), integer no-good cuts | `test_distinct_alternatives_generation`, ILP constraints | D6 (Analytical Note: Model & Constraints), Method Approval |
-| **Team B** | **Member B3** | **Engine Orchestration & Robustness Specialist** | Main engine lifecycle, solver diagnostics, infeasibility root-causes, 7 solver edge cases | 7 edge cases in `test_edge_cases.py` (Cases 1, 2, 3, 4, 13, 14, 15) | D4 (Contract Spec), D7 (Testing & Quality Evidence) |
+| [0.1](issues/0.1.md) | Set up computer, prove `36 passed, 15 xfailed` | none | everyone | 1 | S |
+| [0.2](issues/0.2.md) | Board, labels, PR + issue templates, protect `main` | `.github/` (new) | A1 | 1 | S |
+| [0.3](issues/0.3.md) | Add PuLP solver library (**blocks Team B**) | `requirements.txt` | B2 | 1 | S |
+| [0.4](issues/0.4.md) | Fix wrong test counts and file names in docs | `README.md`, `docs/team_related/developer_onboarding_guide.md` | A1 | 1 | S |
+| [0.5](issues/0.5.md) | Move `AssignmentStrategy` to its own file (avoids B2/B3 conflicts) | `app/engine/strategies.py` (new), `solvers.py` | B3 | 1 | M |
+
+### Team A: the face
+
+| ID | What | Where | Owner | Week | Size |
+|---|---|---|---|---|---|
+| [A1.1](issues/A1.1.md) | Skills: add and delete (with checks) | `routes.py` `create_skill`/`delete_skill`, `skills.html`, `test_skills_crud_workflow` | A1 | 1 | M |
+| [A1.2](issues/A1.2.md) | Projects: create, edit, delete with skill requirements; edit form pre-fills saved values | `routes.py` project functions, `project_form.html`, `projects.html`, `test_projects_crud_workflow` | A1 | 1–2 | L |
+| [A1.3](issues/A1.3.md) | Friendly messages for bad input (8 cases, a test each) | `routes.py`, `student_form.html`, `project_form.html`, `tests/test_visualization_component.py` | A1 | 2 | M |
+| [A1.4](issues/A1.4.md) | D5: database and SQL documentation with real query results | `docs/database_design.md`, `app/persistence/queries.sql` | A1 (+B1) | 2 | M |
+| [A1.5](issues/A1.5.md) | D1: progress reports 1 and 2 | `docs/progress_report_1.md`, `_2.md` (new) | A1 (+B2) | 1, 2 | S |
+| [A2.1](issues/A2.1.md) | Compare page: what improves / worsens / who is affected | `routes.py` `compare_solutions`, `compare.html`, `test_compare_solutions_view` | A2 | 1–2 | L |
+| [A2.2](issues/A2.2.md) | Recommendations: evidence vs advice clearly separated | `recommendations.html`, `run_detail.html` | A2 | 2 | M |
+| [A2.3](issues/A2.3.md) | Lock-and-re-run: permission check, keep strategy, show changes | `routes.py` `lock_and_rerun`, `solution_detail.html` | A2 | 2 | M |
+| [A2.4](issues/A2.4.md) | Role-access audit: Student Viewer can never change data | `auth.py`, `routes.py` (all POST), templates, tests | A2 | 3 | M |
+| [A2.5](issues/A2.5.md) | D3: architecture diagrams and design rationale | `docs/architecture.md` | A2 (+B3) | 1–3 | M |
+| [A2.6](issues/A2.6.md) | D8: reproducible demo script with real numbers | `docs/reproducible_demonstration.md` | A2 (+B2) | 3 | L |
+
+### Team B: the brain
+
+| ID | What | Where | Owner | Week | Size |
+|---|---|---|---|---|---|
+| [B-0](issues/B-0.md) | Method proposal (ILP), send to professor, record reply | `docs/method_proposal.md` (new) | B2 | 1 | M |
+| [B1.1](issues/B1.1.md) | Skill-fit score and Gini | `metrics.py`, `test_skill_fit_calculation`, `test_gini_calculation` | B1 | 1 | M |
+| [B1.2](issues/B1.2.md) | Solution indicators (feasibility, efficiency, fairness, capacity) | `metrics.py`, `test_solution_indicators_calculation` | B1 | 2 | L |
+| [B1.3](issues/B1.3.md) | Compare-two-solutions numbers (exact keys for the Compare page) | `metrics.py`, `test_solution_comparison` | B1 | 2 | M |
+| [B2.1](issues/B2.1.md) | PuLP model: yes/no variables and hard rules | `strategies.py`, `tests/test_solvers.py` | B2 | 2 | L |
+| [B2.2](issues/B2.2.md) | Three strategies: `PREFERENCE`, `SKILL_FIT`, `BALANCED` | `strategies.py`, `tests/test_solvers.py` | B2 | 2 | L |
+| [B2.3](issues/B2.3.md) | Distinct alternatives with no-good cuts | `strategies.py`, `test_distinct_alternatives_generation` | B2 | 2 | M |
+| [B3.1](issues/B3.1.md) | `AssignmentEngine.execute_run` (placeholder strategy first, real ones in Week 2) | `solvers.py` | B3 | 1–2 | L |
+| [B3.2](issues/B3.2.md) | Update old tests that expect "not implemented" (merge with B3.1) | `tests/test_solvers.py`, `test_contract_and_engine.py`, `test_component_integration.py` | B3 | 2 | M |
+| [B3.3](issues/B3.3.md) | Readable diagnostics when no solution exists | `solvers.py`, `app/domain/validation.py` (reasons only) | B3 | 2–3 | M |
+| [B3.4](issues/B3.4.md) | Seven edge-case tests: 1, 2, 3, 4, 13, 14, 15 | `tests/test_edge_cases.py` + fixes in `app/engine/` | B3 (+B1, B2) | 2–3 | L |
+| [B3.5](issues/B3.5.md) | D4: component contract document | `docs/internal_component_contract.md` | B3 (+A1) | 1–2 | M |
+| [B3.6](issues/B3.6.md) | D7: testing evidence | `docs/testing_and_quality.md` | B3 (+A1, B1) | 3 | M |
+| [B2.4 + B1.4](issues/B2.4-B1.4.md) | D6: analytical note (B2 formulation, B1 indicators, B3 diagnostics) | `docs/analytical_note.md` (from template) | B2, B1, B3 | 3 | M each |
+
+### Shared integration
+
+| ID | What | Where | Owner | Week | Size |
+|---|---|---|---|---|---|
+| [X1](issues/X1.md) | Swap mock engine for real engine, walk every page | `routes.py` `trigger_run`, `lock_and_rerun` | A2 + B3 | 2 | M |
+| [X2](issues/X2.md) | Try every scenario incl. bad data, fix unclear screens | scenarios in `app/samples/demo_data.py` | A1 + B3 | 3 | M |
+| [X3](issues/X3.md) | One full end-to-end test, no mock | `tests/test_component_integration.py` | A1 | 3 | M |
+| [X4](issues/X4.md) | Remove starter leftovers (`Starter Carcass`, `TODO (Team`) | `app/` | A2 | 3 | S |
+| [X5](issues/X5.md) | D9: team reflection, rewritten with the real story | `docs/team_reflection_and_rubric.md` | everyone (B3 collects) | 3 | M |
+| [X6](issues/X6.md) | Git/PR evidence | `docs/git_evidence.md` (new) | A1 | 3 | S |
+| [X7](issues/X7.md) | Final release check, tag `v1.0` | none | all | 3 | S |
 
 ---
 
-## 2. The Three-Week Journey & Weekly Milestones
+## 3. Weekly plan and gates
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│ WEEK 1: Understand, Design, and Divide                                 │
-│ Contract alignment, mock-driven UI start, mathematical formulation     │
-└──────────────────────────────────┬─────────────────────────────────────┘
-                                   │
-┌──────────────────────────────────▼─────────────────────────────────────┐
-│ WEEK 2: Make It Real                                                   │
-│ Implement ILP solvers, indicators, comparison view & mock-engine swap  │
-└──────────────────────────────────┬─────────────────────────────────────┘
-                                   │
-┌──────────────────────────────────▼─────────────────────────────────────┐
-│ WEEK 3: Make It Robust and Explainable                                 │
-│ 13+ edge cases, diagnostics, Deliverables 1–9, reproducible demo script│
-└────────────────────────────────────────────────────────────────────────┘
-```
+| Week | Team A | Team B | Gate at end of week |
+|---|---|---|---|
+| **1** | 0.1, 0.2, 0.4, A1.1, A1.2, A2.1 (on mock), A2.5 start, A1.5 | 0.1, 0.3, 0.5, B-0, B1.1, B3.1 (placeholder), B3.5 | Forms create skills/projects; compare works on mock; method proposal sent |
+| **2** | A1.2 finish, A1.3, A1.4, A2.2, A2.3, X1, A1.5 | B1.2, B1.3, B2.1–B2.3, B3.1 final, B3.2, B3.3, B3.4 start | Real engine swapped in; 2+ different solutions on `/compare` |
+| **3** | A2.4, A2.6, X2, X3, X4, X6 | B3.4, B3.6, B2.4, B1.4, X5 | `51 passed`, demo rehearsed twice, all 9 deliverables done (X7) |
 
-### Week 1: Understand, Design, and Divide
-* **Theme:** Component decoupling, baseline understanding, contract agreement, and data intake.
-* **Team A Focus:**
-  * Explore the starter application and database schema (`app/persistence/schema.sql`).
-  * Implement Project and Skill management interfaces (CRUD).
-  * Build interactive workflows against the provided [`MockAssignmentEngine`](../../app/contract/mocks.py) without waiting for Team B.
-* **Team B Focus:**
-  * Formalize the assignment problem mathematically (sets, indices, decision variables, constraints, objective functions).
-  * Prepare the **Professor Approval Point** proposal for the chosen method (Integer Linear Programming via PuLP).
-  * Implement domain validation logic and verify pre-flight feasibility checks.
-* **Shared Activities:** Run the initial 51 automated tests (36 passing baseline, 15 xfailed target tasks).
-* **Week 1 Milestone & Definition of Done:**
-  1. Team A can create, edit, and delete projects and skills via web forms, and trigger mock assignment runs to preview comparisons.
-  2. Team B has written the formal mathematical proposal, obtained instructor approval, and verified all input validation tests (`tests/test_validation.py`).
-  3. **Deliverable 1 (Progress Report 1)** submitted reflecting Week 1 division and architectural decisions.
+**Critical path:** `0.3 → 0.5 → B2.1 → B2.2 → B2.3 → B3.4` and `B1.1 → B1.2 → B1.3 → real data on the Compare page`. If the professor's reply is late, B2 keeps working under the same strategy names, so Team A is never blocked.
 
----
+**Deliverable owners:** D1 A1 · D2 B3 + A2 · D3 A2 · D4 B3 · D5 A1 · D6 B2 (+B1, B3) · D7 B3 · D8 A2 · D9 all.
 
-### Week 2: Make It Real
-* **Theme:** Algorithmic implementation, indicator calculation, and live integration.
-* **Team A Focus:**
-  * Implement side-by-side solution comparison controller and view (`/compare`).
-  * Display analytical deltas ($\Delta$ skill-fit, $\Delta$ rank, $\Delta$ Gini) and student re-allocation diffs.
-  * Implement transparent recommendation presentation distinguishing evidence from advice.
-* **Team B Focus:**
-  * Implement the PuLP ILP solver with the 3 required strategies:
-    1. `PreferenceOrientedSolver` (satisfaction / rank regret minimization).
-    2. `SkillFitOrientedSolver` (competence matching).
-    3. `BalancedTradeoffSolver` (Pareto scalarized compromise).
-  * Implement sequential alternative generation via **integer no-good cuts** ($\sum_{(s,p) \in A^{(k)}} x_{s,p} \le |S| - 1$) to generate up to $K=3$ distinct solutions.
-  * Implement all analytical indicators: Feasibility, Efficiency ($\bar{\sigma}$), Fairness ($\bar{r}, r_{\max}$, unranked count, and Gini $G$ / rank variance), and Capacity Utilization.
-* **Shared Activities (The Mock Swap):**
-  * Replace `MockAssignmentEngine` with real `AssignmentEngine`. Verify that real optimization results populate the database and display on the UI.
-* **Week 2 Milestone & Definition of Done:**
-  1. The application solves real student-project cohorts end-to-end in-process without relying on mock data.
-  2. Multiple distinct alternatives ($K \ge 2$) are produced and compared side-by-side with live delta metrics.
-  3. **Deliverable 1 (Progress Report 2)** submitted detailing solver integration and preliminary test results.
+## 4. What changed from the first version (short)
 
----
+- Added what was missing: PuLP install (0.3), engine file split (0.5), updating tests that expect "not implemented" (B3.2), professor-approval owner (B-0).
+- Team A tasks now require real test assertions, not just "page does not crash".
+- B3 starts in Week 1 with a placeholder strategy; Team A takes integration and QA tasks, so work is balanced.
+- Pre-written docs (`reproducible_demonstration.md`, `team_reflection_and_rubric.md`) must be rewritten from real results, not submitted as they are.
+- Issues name functions, not line numbers; real file names (`solution_detail.html`); test count 51 / 36 pass / 15 xfail everywhere.
 
-### Week 3: Make It Robust and Explainable
-* **Theme:** Corner cases, failure modes, diagnostics, report documentation, and live demonstration.
-* **Team A Focus:**
-  * Audit Role-Based Access Control (RBAC): ensure `Student Viewer` has zero mutating privileges.
-  * Refine the interactive "Pin Lock & Re-run" workflow on the solution view.
-  * Prepare and rehearse the reproducible demonstration script covering the 4 mandatory scenarios.
-* **Team B Focus:**
-  * Systematically test and resolve all **13+ edge cases** from Section 9 (tied preferences, missing skills, zero-skill students, capacity deficits, contradictory locks, infeasibility handling, degenerate alternative search).
-  * Enhance solver diagnostics: return clear root-cause explanations on infeasibility rather than unhandled crashes.
-  * Complete Deliverable 6 (**Analytical Note**).
-* **Shared Activities:** Full automated test suite passes with **100% pass rate (0 unexpected failures or regressions)**.
-* **Week 3 Milestone & Definition of Done:**
-  1. All 51 pytest tests pass cleanly (`51 passed, 0 xfailed`).
-  2. Complete decision-support walkthrough operational: Data entry $\rightarrow$ Run triggering $\rightarrow$ Pareto comparison $\rightarrow$ Recommendation review $\rightarrow$ Fixed lock & rerun $\rightarrow$ Infeasible cohort diagnostics.
-  3. All 9 official project deliverables finalized.
+## 5. How we know we are done
 
----
-
-## 3. What Success Looks Like
-
-Section 12 of the brief establishes that success is evaluated not merely by whether code executes, but by whether a real decision-maker (e.g. CEMS project coordinator at NHH) can **understand and trust** the system.
-
-> *"Do not ask only: 'Does our code work?' Also ask: 'Would a real decision-maker understand and trust what our application is telling them?'"*
-
-### The 9 Criteria of Success
-
-| # | Criterion | Verification & Evidence in the Codebase |
-|:---:|---|---|
-| **1** | **We understand the decision problem** | The application acknowledges conflicting objectives (student happiness vs. project skill delivery) and makes trade-offs explicit rather than masking them behind a single score. |
-| **2** | **We translate business requirements into software** | Domain models ([`Student`](../../app/domain/models.py#L189-L295), [`Project`](../../app/domain/models.py#L297-L375), [`Assignment`](../../app/domain/models.py#L424-L480)) represent capacities $[l_p, u_p]$, skill levels $1$–$5$, mandatory vs. soft requirements, and fixed locks. |
-| **3** | **Components integrate through a clear contract** | Component A and Component B communicate strictly through [`AssignmentEngineContract`](../../app/contract/contract.py#L117-L195) via typed DTOs without network overhead. |
-| **4** | **Assignments respect hard constraints** | Feasibility checks guarantee exact allocation ($\sum_p x_{s,p} = 1$), capacity limits, mandatory skill satisfaction, and fixed assignment preservation. |
-| **5** | **We measure efficiency and fairness** | Concrete metrics implemented: mean skill-fit $\bar{\sigma} \in [0, 1]$, rank distribution, unranked count, worst rank $r_{\max}$, and Gini coefficient $G$ (or rank variance). |
-| **6** | **Meaningful alternatives and trade-offs** | Generates up to $K=3$ distinct alternatives using integer no-good cuts. UI highlights: *What improves? What worsens? Who is affected?* |
-| **7** | **Recommendations are transparent** | Recommendations explicitly separate calculated mathematical facts (evidence) from policy guidance (advice) across 3 priorities. |
-| **8** | **Problematic situations handled predictably** | When infeasible or invalid, the system produces actionable diagnostic explanations instead of unexplained crashes. |
-| **9** | **Sound software-engineering practice** | Normalized 3NF SQLite schema, repository pattern, strategy pattern, clean Git history, module-only imports, type hints, and full test suite. |
-
----
-
-## 4. Detailed Task Allocation & Issue Breakdown
-
-### Team A (2 Members): Visualization & Recommendation
-
-#### Member A1: Data Management & Entity Specialist
-* **Focus:** Data intake pipelines, relational CRUD forms, requirement matrices, and input sanity checks.
-* **Assigned Issues:**
-  1. **Issue A1.1: Skill Catalog Management**
-     * Routes: `POST /skills/new`, `POST /skills/<id>/delete` in [`app/visualization/routes.py`](../../app/visualization/routes.py#L446-L475).
-     * Template: Add creation form and catalog cards to [`skills.html`](../../app/visualization/templates/skills.html).
-     * Target Test: Pass `test_skills_crud_workflow` in [`tests/test_visualization_component.py`](../../tests/test_visualization_component.py).
-  2. **Issue A1.2: Project Catalog & Dynamic Requirement Matrix**
-     * Routes: `POST /projects/new`, `POST /projects/<id>/edit`, `POST /projects/<id>/delete`.
-     * Templates: Implement dynamic requirement matrix in [`project_form.html`](../../app/visualization/templates/project_form.html) (looping catalogued skills, inputs for minimum levels $1$–$5$, mandatory checkboxes) and project cards on [`projects.html`](../../app/visualization/templates/projects.html).
-     * Target Test: Pass `test_projects_crud_workflow` in [`tests/test_visualization_component.py`](../../tests/test_visualization_component.py).
-  3. **Issue A1.3: Cohort Intake Validation & Flash Guidance**
-     * Graceful user feedback for invalid capacities ($min > max$, negative values) and missing skill IDs.
-  4. **Deliverable Contributions:** Lead Deliverable 5 (Database Model & SQL UI Documentation); Co-lead Deliverable 1 (Progress Report 1).
-
-#### Member A2: Decision Support, Comparison & UX Specialist
-* **Focus:** Multi-solution visualization, trade-off comparisons, transparent recommendations, and live demonstration.
-* **Assigned Issues:**
-  1. **Issue A2.1: Side-by-Side Solution Comparison View**
-     * Route: `GET /compare?sol1=<id>&sol2=<id>` in [`app/visualization/routes.py`](../../app/visualization/routes.py#L776-L786).
-     * Template: Build [`compare.html`](../../app/visualization/templates/compare.html) with:
-       * Metric delta cards ($\Delta \bar{\sigma}, \Delta \bar{r}, \Delta G$).
-       * Re-allocation diff table detailing each student assigned a different project.
-     * Target Test: Pass `test_compare_solutions_view` in [`tests/test_visualization_component.py`](../../tests/test_visualization_component.py).
-  2. **Issue A2.2: Transparent Recommendation Presentation & Pin-Lock UX**
-     * Wire [`recommendations.html`](../../app/visualization/templates/recommendations.html) distinguishing mathematical evidence from policy advice across 3 priorities.
-     * Refine the interactive "Pin lock and re-run" workflow on [`solution.html`](../../app/visualization/templates/solution.html).
-  3. **Issue A2.3: RBAC Audit & Reproducible Demonstration Script**
-     * Verify `Student Viewer` role masks all mutating buttons.
-     * Author the complete demonstration script in [`docs/reproducible_demonstration.md`](../reproducible_demonstration.md) covering the 4 required scenarios from Section 11:
-       1. Trade-off between alternatives.
-       2. Transparent recommendation.
-       3. Fixed assignment and immediate re-run.
-       4. Invalid or infeasible input scenario.
-  4. **Deliverable Contributions:** Lead Deliverable 8 (Reproducible Application Demonstration); Lead Deliverable 3 (System Architecture Specification).
-
----
-
-### Team B (3 Members): Assignment Engine
-
-#### Member B1: Analytical Indicators & Fairness Specialist
-* **Focus:** Mathematical definitions and calculations of efficiency, fairness, capacity utilization, and comparative deltas.
-* **Assigned Issues:**
-  1. **Issue B1.1: Skill-Fit Scoring & Gini Coefficient Calculation**
-     * In [`app/engine/metrics.py`](../../app/engine/metrics.py):
-       * `calculate_assignment_skill_fit(student, project)`: Compute requirement qualification ratio $\min(\frac{\text{student\_level}}{\text{req\_level}}, 1.0)$, returning normalized score in $[0.0, 1.0]$ and unmet skill IDs.
-       * `calculate_gini(values)`: Implement Gini index of preference rank distribution ($G \in [0.0, 1.0]$) with zero-division safety.
-     * Target Tests: Pass `test_gini_calculation` and `test_skill_fit_calculation` in [`tests/test_metrics.py`](../../tests/test_metrics.py).
-  2. **Issue B1.2: Multidimensional Solution Indicators**
-     * Implement `compute_solution_indicators(...)` across all 4 mandatory dimensions:
-       * *Feasibility:* Exact allocation, capacity compliance, mandatory skills, fixed locks.
-       * *Efficiency:* Mean skill-fit score $\bar{\sigma}$, unmet soft requirements count.
-       * *Fairness:* Rank distribution, mean rank $\bar{r}$, worst rank $r_{\max}$, unranked count, rank variance, Gini coefficient $G$.
-       * *Capacity:* Aggregate cohort utilization %, per-project utilization.
-     * Target Test: Pass `test_solution_indicators_calculation` in [`tests/test_metrics.py`](../../tests/test_metrics.py).
-  3. **Issue B1.3: Comparative Solution Deltas & Trade-off Summaries**
-     * Implement `compare_two_solutions(solution_a, solution_b)` returning distinctness boolean, student movement count, metric deltas, and natural-language trade-off summaries.
-     * Target Test: Pass `test_solution_comparison` in [`tests/test_metrics.py`](../../tests/test_metrics.py).
-  4. **Deliverable Contributions:** Author Sections 3 and 4 of Deliverable 6 ([`docs/analytical_note_template.md`](../analytical_note_template.md)): Mathematical definition of all indicators, fairness justification, and delta equations.
-
-#### Member B2: Mathematical Optimization & Solvers Specialist
-* **Focus:** Mathematical formulation, PuLP ILP solver implementation, objective strategies, and integer no-good cuts.
-* **Assigned Issues:**
-  1. **Issue B2.1: Mathematical Formulation & Instructor Approval Proposal**
-     * In Week 1, write the formal proposal note for the **Professor Approval Point** justifying Integer Linear Programming (PuLP/CBC).
-     * Formulate binary decision variables $x_{s,p} \in \{0, 1\}$ and hard constraints:
-       $$\sum_{p \in P} x_{s,p} = 1 \quad \forall s \in S \quad (\text{exact allocation})$$
-       $$l_p \le \sum_{s \in S} x_{s,p} \le u_p \quad \forall p \in P \quad (\text{capacity bounds})$$
-       $$x_{s,p} = 1 \quad \forall (s,p) \in F \quad (\text{fixed administrative locks})$$
-       $$x_{s,p} = 0 \quad \text{if student } s \text{ lacks mandatory skill for project } p$$
-  2. **Issue B2.2: Concrete Assignment Strategies (Strategy Pattern)**
-     * In [`app/engine/solvers.py`](../../app/engine/solvers.py), implement concrete subclasses of [`AssignmentStrategy`](../../app/engine/solvers.py#L23-L89):
-       * `PreferenceOrientedSolver`: Maximizes rank satisfaction (or minimizes rank regret).
-       * `SkillFitOrientedSolver`: Maximizes total skill qualification fit.
-       * `BalancedTradeoffSolver`: Pareto scalarized convex combination.
-  3. **Issue B2.3: Sequential Pareto Alternative Generation via No-Good Cuts**
-     * Implement integer no-good cuts: after finding solution $A^{(k)}$, append:
-       $$\sum_{(s,p) \in A^{(k)}} x_{s,p} \le |S| - 1$$
-     * Re-solve up to $K=3$ distinct alternatives. If no further feasible solution exists, terminate honestly without manufacturing duplicate solutions.
-     * Target Test: Pass `test_distinct_alternatives_generation` in [`tests/test_solvers.py`](../../tests/test_solvers.py).
-  4. **Deliverable Contributions:** Lead Deliverable 6 ([`docs/analytical_note_template.md`](../analytical_note_template.md)): Formal notation, decision variables, objectives, and constraint equations; Co-lead Deliverable 1 (Progress Report 2).
-
-#### Member B3: Engine Orchestration, Diagnostics & Edge Cases Specialist
-* **Focus:** Main engine lifecycle execution, solver diagnostics, infeasibility detection, and test suite verification across all Section 9 edge cases.
-* **Assigned Issues:**
-  1. **Issue B3.1: Main Engine Orchestration (`AssignmentEngine.execute_run`)**
-     * Wire [`AssignmentEngine.execute_run`](../../app/engine/solvers.py#L91-L255) to fulfill [`AssignmentEngineContract`](../../app/contract/contract.py#L117-L195):
-       * Pre-flight cohort validation.
-       * Solver loop invoking Member B2's strategy and cuts.
-       * Indicator computation invoking Member B1's metrics.
-       * Relational persistence of `AssignmentRun`, `Solution`, and `Assignment` via `RunRepository`.
-  2. **Issue B3.2: Solver Diagnostics & Infeasibility Root-Cause Analysis**
-     * Capture [`DiagnosticInfo`](../../app/contract/contract.py#L26-L59): solve time, variable count, constraint count.
-     * Infeasibility reporting: identify specific bottlenecks (e.g. aggregate capacity shortfall, contradictory student locks, unavailable mandatory qualifications).
-  3. **Issue B3.3: Systematic Edge Case Verification (The 7 Solver Edge Cases)**
-     * Verify and pass the 7 solver-dependent tests in [`tests/test_edge_cases.py`](../../tests/test_edge_cases.py):
-       * `test_edge_case_1`: Incomplete student preferences.
-       * `test_edge_case_2`: Tied preferences across students.
-       * `test_edge_case_3`: Student with zero recorded skills.
-       * `test_edge_case_4`: Project with zero skill requirements.
-       * `test_edge_case_13`: Provably infeasible problem instance.
-       * `test_edge_case_14`: Exactly one feasible solution exists (cuts cleanly terminate).
-       * `test_edge_case_15`: Duplicate avoidance under degenerate alternative search.
-     * Target: Transition all 7 XFAILs in `test_edge_cases.py` to PASS.
-  4. **Deliverable Contributions:** Lead Deliverable 7 (Testing, Quality, and Robustness Evidence); Lead Deliverable 4 (Component Contract Documentation); Author Sections 5, 6, and 7 of Deliverable 6.
-
----
-
-## 5. Deliverables Mapping Across Team Members
-
-The 9 required deliverables from Section 11 of the brief are distributed as follows:
-
-| Deliverable | Description | Lead Owner | Contributing Members | Target Milestone |
-|---|---|---|---|:---:|
-| **D1: Progress Reports** | Brief progress reports after Week 1 and Week 2 | Member A1 | Member B2 | Weeks 1 & 2 |
-| **D2: Working Application** | Integrated Flask + SQLite application with real engine | Member B3 & Member A2 | All members | Week 2 |
-| **D3: Architecture & Design** | Component & class diagrams with design rationale | Member A2 | Member B3 | Week 1 |
-| **D4: Component Contract** | Contract specification & integration documentation | Member B3 | Member A1 | Week 1 |
-| **D5: Database & SQL** | 3NF model documentation & analytical queries | Member A1 | Member B1 | Week 2 |
-| **D6: Analytical Note** | Mathematical report (formulation, indicators, advice) | Member B2 (Formulation) | Member B1 (Indicators), Member B3 (Diagnostics) | Week 3 |
-| **D7: Testing Evidence** | Unit, integration, and edge-case test evidence | Member B3 | Member A1, Member B1 | Week 3 |
-| **D8: Reproducible Demo** | Demonstration walkthrough script (4 core scenarios) | Member A2 | Member B2 | Week 3 |
-| **D9: Team Reflection** | Collaborative practice, Git, AI tools, SDLC lessons | All members | All members | Week 3 |
+1. `python -m pytest -q` shows `51 passed`.
+2. `grep -rn "xfail\|TODO (Team" app tests` finds nothing.
+3. A teammate who did not write the demo follows `docs/reproducible_demonstration.md` on a fresh clone and gets the same results.
+4. A non-developer completes section 1.4 of the onboarding guide alone in under 30 minutes.
 
 ---
 
@@ -309,3 +175,4 @@ flowchart TD
 1. **Gate 1 (End of Week 1):** Team B delivers approved ILP formulation proposal; Team A verifies that Project and Skill forms can seed a test cohort and trigger mock comparisons.
 2. **Gate 2 (Mid-Week 2):** Team B provides working `AssignmentEngine`; Team A performs the **Mock Swap** and verifies that `/compare` displays real solver output with Pareto alternatives.
 3. **Gate 3 (End of Week 3):** Full team conducts the 4-scenario reproducible demonstration walkthrough in a dry-run rehearsal before final submission.
+
