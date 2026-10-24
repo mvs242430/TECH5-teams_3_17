@@ -21,6 +21,8 @@ from app.persistence import repositories
 from app.samples import demo_data
 from app.visualization import auth
 
+from types import SimpleNamespace
+
 web_bp = flask.Blueprint("visualization_web", __name__)
 
 
@@ -774,14 +776,80 @@ def clear_solutions() -> flask.Response:
 
 
 @web_bp.get("/compare")
-def compare_solutions() -> Any:
-    """Renders side-by-side comparative analysis of two solutions.
+def compare_solutions() -> flask.Response:
+    """Renders a side-by-side comparison of two allocation solutions."""
+    sol1_id = flask.request.args.get("sol1")
+    sol2_id = flask.request.args.get("sol2")
 
-    Raises:
-        NotImplementedError: To be implemented by Team A.
-    """
-    raise NotImplementedError(
-        "TODO (Team A): Implement side-by-side solution comparison controller"
+    # 1. Fetch recent runs and build solution options list and lookup map
+    try:
+        engine = solvers.AssignmentEngine()
+        runs = engine.list_runs(limit=20)
+    except (NotImplementedError, AttributeError):
+        engine = mocks.MockAssignmentEngine()
+        runs = engine.list_runs(limit=20)
+
+    all_solutions = []
+    solutions_map = {}
+    for r in runs:
+        for s in r.solutions:
+            sol_option = SimpleNamespace(
+                id=s.id,
+                alternative_number=getattr(s, "alternative_number", 1),
+                strategy_name=getattr(s, "strategy_name", "DEFAULT"),
+                run_id=r.id
+            )
+            all_solutions.append(sol_option)
+            solutions_map[s.id] = s
+
+    # 2. If no IDs are provided, render the selector page
+    if not sol1_id and not sol2_id:
+        return flask.render_template(
+            "compare.html",
+            all_solutions=all_solutions,
+            sol_a=None,
+            sol_b=None,
+            comparison=None
+        )
+
+    # 3. If only one ID is provided, warn and redirect
+    if not sol1_id or not sol2_id:
+        flask.flash("Please select both Solution A and Solution B to compare.", "warning")
+        return flask.redirect(flask.url_for("visualization_web.compare_solutions"))
+
+    # 4. Handle unknown IDs gracefully with a red flash message and redirect
+    sol_a = solutions_map.get(sol1_id)
+    sol_b = solutions_map.get(sol2_id)
+    if not sol_a or not sol_b:
+        flask.flash("One or both selected solution IDs are unknown or invalid.", "danger")
+        return flask.redirect(flask.url_for("visualization_web.compare_solutions"))
+
+    # 5. Execute comparison with fallback to MockAssignmentEngine
+    try:
+        comparison = engine.compare_solutions(sol1_id, sol2_id)
+    except NotImplementedError:
+        flask.flash(
+            "Notice: AssignmentEngine.compare_solutions() is not yet implemented by "
+            "Team B. Falling back to MockAssignmentEngine for comparison.",
+            "info",
+        )
+        mock_engine = mocks.MockAssignmentEngine()
+        try:
+            comparison = mock_engine.compare_solutions(sol1_id, sol2_id)
+        except Exception as e:
+            flask.flash(f"Error during mock comparison: {str(e)}", "danger")
+            return flask.redirect(flask.url_for("visualization_web.compare_solutions"))
+    except Exception as e:
+        flask.flash(f"Error comparing solutions: {str(e)}", "danger")
+        return flask.redirect(flask.url_for("visualization_web.compare_solutions"))
+
+    # 6. Render comparison template with all required context
+    return flask.render_template(
+        "compare.html",
+        all_solutions=all_solutions,
+        sol_a=sol_a,
+        sol_b=sol_b,
+        comparison=comparison
     )
 
 

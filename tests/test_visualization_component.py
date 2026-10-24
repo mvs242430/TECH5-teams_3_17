@@ -216,14 +216,37 @@ def test_projects_crud_workflow(tmp_path: pathlib.Path) -> None:
     )
 
 
-@pytest.mark.xfail(
-    raises=NotImplementedError,
-    reason="TODO (Team A): Implement comparison controller & view",
-)
 def test_compare_solutions_view(tmp_path: pathlib.Path) -> None:
-    """Verifies solution comparison controller (Team A implementation)."""
+    """Verifies solution comparison controller and view (Team A implementation)."""
+    from app.engine import solvers
+    
     db_file = tmp_path / "test_comp.db"
-    app = create_app({"TESTING": True, "DATABASE_PATH": db_file})
-    client = app.test_client()
+    app_instance = create_app({"TESTING": True, "DATABASE_PATH": db_file})
+    client = app_instance.test_client()
 
-    client.get("/compare?sol1=S1&sol2=S2")
+    # 1. Load a standard scenario and trigger a run to generate valid solutions
+    client.post("/load-scenario/standard", follow_redirects=True)
+    client.post(
+        "/runs/trigger",
+        data={
+            "primary_strategy": "PREFERENCE",
+            "max_alternatives": 2,
+        },
+        follow_redirects=True,
+    )
+
+    # 2. Retrieve valid solution IDs from the engine
+    engine = solvers.AssignmentEngine()
+    runs = engine.list_runs(limit=1)
+    assert len(runs) > 0
+    sol1_id = runs[0].solutions[0].id
+    sol2_id = runs[0].solutions[1].id if len(runs[0].solutions) > 1 else sol1_id
+
+    # 3. Test valid comparison request (Assert status 200 and expected text)
+    res = client.get(f"/compare?sol1={sol1_id}&sol2={sol2_id}")
+    assert res.status_code == 200
+    assert b"Changed Student Allocations" in res.data
+
+    # 4. Test unknown ID handling (Assert it safely redirects instead of crashing)
+    res_unknown = client.get("/compare?sol1=fake_id_1&sol2=fake_id_2", follow_redirects=False)
+    assert res_unknown.status_code in (301, 302, 303, 307, 308)
