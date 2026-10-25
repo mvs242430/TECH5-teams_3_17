@@ -172,17 +172,14 @@ def test_create_student_preference_validation(
     assert saved.preferences[0].project_id == "P1"
 
 
-@pytest.mark.xfail(
-    raises=NotImplementedError,
-    reason="TODO (Team A): Implement skill CRUD",
-)
 def test_skills_crud_workflow(tmp_path: pathlib.Path) -> None:
-    """Verifies skill addition workflow (Team A implementation)."""
+    """Verifies skill CRUD workflow and authorization (Team A implementation)."""
     db_file = tmp_path / "test_skill.db"
     app = create_app({"TESTING": True, "DATABASE_PATH": db_file})
     client = app.test_client()
 
-    client.post(
+    # 1. Admin creates a new skill
+    res = client.post(
         "/skills/new",
         data={
             "id": "py",
@@ -191,6 +188,80 @@ def test_skills_crud_workflow(tmp_path: pathlib.Path) -> None:
         },
         follow_redirects=True,
     )
+    assert res.status_code == 200
+    assert b"created successfully" in res.data
+
+    saved = repositories.SkillRepository().get_by_id("py")
+    assert saved is not None
+    assert saved.id == "py"
+    assert saved.name == "Python"
+    assert saved.description == "Python Programming"
+
+    # 2. Empty ID and invalid ID characters are rejected
+    res_empty = client.post(
+        "/skills/new",
+        data={"id": "", "name": "Empty ID", "description": ""},
+        follow_redirects=True,
+    )
+    assert res_empty.status_code == 200
+    assert b"cannot be empty" in res_empty.data
+
+    res_invalid = client.post(
+        "/skills/new",
+        data={"id": "Python-Bad!", "name": "Bad ID", "description": ""},
+        follow_redirects=True,
+    )
+    assert res_invalid.status_code == 200
+    assert b"may only contain lowercase letters" in res_invalid.data
+
+    # 3. Duplicate skill ID is rejected
+    res_dup = client.post(
+        "/skills/new",
+        data={
+            "id": "py",
+            "name": "Python Duplicate",
+            "description": "Duplicate description",
+        },
+        follow_redirects=True,
+    )
+    assert res_dup.status_code == 200
+    assert b"already exists" in res_dup.data
+    # Verify original skill was not overwritten
+    re_check = repositories.SkillRepository().get_by_id("py")
+    assert re_check is not None
+    assert re_check.name == "Python"
+
+    # 4. Student Viewer is denied permission
+    client.post("/set-role", data={"role": "STUDENT"}, follow_redirects=True)
+    res_denied = client.post(
+        "/skills/new",
+        data={
+            "id": "java",
+            "name": "Java",
+            "description": "Java Programming",
+        },
+        follow_redirects=True,
+    )
+    assert res_denied.status_code == 200
+    assert b"Permission denied" in res_denied.data
+    assert repositories.SkillRepository().get_by_id("java") is None
+
+    # 5. Prevent deleting a skill in use by a student
+    client.post("/set-role", data={"role": "ADMIN"}, follow_redirects=True)
+    repositories.StudentRepository().save(
+        models.Student(id="S1", display_name="Alice", skills={"py": 2})
+    )
+    res_in_use = client.post("/skills/py/delete", follow_redirects=True)
+    assert res_in_use.status_code == 200
+    assert b"still referenced by" in res_in_use.data
+    assert repositories.SkillRepository().get_by_id("py") is not None
+
+    # Remove student reference, then deletion succeeds
+    repositories.StudentRepository().delete("S1")
+    res_del = client.post("/skills/py/delete", follow_redirects=True)
+    assert res_del.status_code == 200
+    assert b"removed" in res_del.data
+    assert repositories.SkillRepository().get_by_id("py") is None
 
 
 @pytest.mark.xfail(

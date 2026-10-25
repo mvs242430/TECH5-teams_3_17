@@ -7,6 +7,7 @@ triggering, multi-solution visual comparisons, and recommendations.
 import collections
 import csv
 import io
+import re
 import sqlite3
 from typing import Any
 
@@ -452,26 +453,105 @@ def list_skills() -> str:
 
 @web_bp.post("/skills/new")
 def create_skill() -> flask.Response:
-    """Creates a new skill record.
+    """Processes creation of a new skill record in the catalog.
 
-    Raises:
-        NotImplementedError: To be implemented by Team A.
+    Validates that the identifier is non-empty, contains only lowercase
+    alphanumerics and underscores, and is not already registered.
+
+    Returns:
+        Redirect response to the skill catalog view.
     """
-    raise NotImplementedError(
-        "TODO (Team A): Implement skill creation"
-    )
+    if not auth.can_edit_cohort_data():
+        flask.flash("Permission denied for current role.", "danger")
+        return flask.redirect(flask.url_for("visualization_web.list_skills"))
+
+    skill_id = flask.request.form.get("id", "").strip()
+    name = flask.request.form.get("name", "").strip()
+    description = flask.request.form.get("description", "").strip()
+
+    if not skill_id:
+        flask.flash("Skill ID cannot be empty.", "danger")
+        return flask.redirect(flask.url_for("visualization_web.list_skills"))
+
+    if not re.fullmatch(r"[a-z0-9_]+", skill_id):
+        flask.flash(
+            "Skill ID may only contain lowercase letters, digits, and underscores.",
+            "danger",
+        )
+        return flask.redirect(flask.url_for("visualization_web.list_skills"))
+
+    skill_repo = repositories.SkillRepository()
+    if skill_repo.get_by_id(skill_id) is not None:
+        flask.flash(f"Skill ID '{skill_id}' already exists.", "danger")
+        return flask.redirect(flask.url_for("visualization_web.list_skills"))
+
+    skill_name = name or skill_id
+    skill = models.Skill(id=skill_id, name=skill_name, description=description)
+    try:
+        skill_repo.save(skill)
+    except sqlite3.IntegrityError as exc:
+        flask.flash(
+            f"Database constraint error while saving skill: {exc}",
+            "danger",
+        )
+        return flask.redirect(flask.url_for("visualization_web.list_skills"))
+
+    flask.flash(f"Skill '{skill_name}' ({skill_id}) created successfully.", "success")
+    return flask.redirect(flask.url_for("visualization_web.list_skills"))
 
 
 @web_bp.post("/skills/<skill_id>/delete")
 def delete_skill(skill_id: str) -> flask.Response:
-    """Deletes a skill record.
+    """Deletes a skill record from the catalog if not in use.
 
-    Raises:
-        NotImplementedError: To be implemented by Team A.
+    Args:
+        skill_id: Target skill identifier to delete.
+
+    Returns:
+        Redirect response to the skill catalog view.
     """
-    raise NotImplementedError(
-        "TODO (Team A): Implement skill deletion"
-    )
+    if not auth.can_edit_cohort_data():
+        flask.flash("Permission denied for current role.", "danger")
+        return flask.redirect(flask.url_for("visualization_web.list_skills"))
+
+    skill_repo = repositories.SkillRepository()
+    skill = skill_repo.get_by_id(skill_id)
+    if not skill:
+        flask.flash(f"Skill '{skill_id}' not found.", "warning")
+        return flask.redirect(flask.url_for("visualization_web.list_skills"))
+
+    # Verify skill is not in use by any student or project
+    students_using = [
+        s.display_name
+        for s in repositories.StudentRepository().list_all()
+        if skill_id in s.skills
+    ]
+    projects_using = [
+        p.title
+        for p in repositories.ProjectRepository().list_all()
+        if any(req.skill_id == skill_id for req in p.requirements)
+    ]
+
+    if students_using or projects_using:
+        reasons: list[str] = []
+        if students_using:
+            reasons.append(f"{len(students_using)} student(s)")
+        if projects_using:
+            reasons.append(f"{len(projects_using)} project(s)")
+        flask.flash(
+            f"Cannot delete skill '{skill_id}': still referenced by {' and '.join(reasons)}.",
+            "danger",
+        )
+        return flask.redirect(flask.url_for("visualization_web.list_skills"))
+
+    try:
+        skill_repo.delete(skill_id)
+    except sqlite3.IntegrityError as exc:
+        flask.flash(f"Database error while deleting skill: {exc}", "danger")
+        return flask.redirect(flask.url_for("visualization_web.list_skills"))
+
+    flask.flash(f"Skill '{skill_id}' removed.", "info")
+    return flask.redirect(flask.url_for("visualization_web.list_skills"))
 
 
 @web_bp.get("/preferences")
