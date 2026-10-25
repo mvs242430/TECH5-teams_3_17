@@ -21,7 +21,7 @@ During Week 2, the team transitioned to feature implementation on dedicated bran
 
 | Member | Responsibility | Allocated Tasks Done | Tasks Done for Other Members |
 | :--- | :--- | :--- | :--- |
-| **Julia** | A1 Responsible | — | — |
+| **Julia** | A1 | — | — |
 | **Tanver** | A2 | — | — |
 | **Daniel** | B1 | — | — |
 | **Torkil** | B2 | — | — |
