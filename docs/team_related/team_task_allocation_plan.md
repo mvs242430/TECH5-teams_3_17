@@ -33,7 +33,7 @@ Size: S ≤ 1 h · M ≤ half day · L ≤ 1 day. Details of each issue: `docs/t
 |---|---|---|---|---|---|
 | [0.1](issues/0.1.md) | Set up computer, prove `36 passed, 15 xfailed` | none | everyone | 1 | S |
 | [0.2](issues/0.2.md) | Board, labels, PR + issue templates, protect `main` | `.github/` (new) | A1 | 1 | S |
-| [0.3](issues/0.3.md) | Add PuLP solver library (**blocks Team B**) | `requirements.txt` | B2 | 1 | S |
+| [0.3](issues/0.3.md) | Add Pyomo & HiGHS solver libraries (**blocks Team B**) | `requirements.txt` | B2 | 1 | S |
 | [0.4](issues/0.4.md) | Fix wrong test counts and file names in docs | `README.md`, `docs/team_related/developer_onboarding_guide.md` | A1 | 1 | S |
 | [0.5](issues/0.5.md) | Move `AssignmentStrategy` to its own file (avoids B2/B3 conflicts) | `app/engine/strategies.py` (new), `solvers.py` | B3 | 1 | M |
 
@@ -57,11 +57,11 @@ Size: S ≤ 1 h · M ≤ half day · L ≤ 1 day. Details of each issue: `docs/t
 
 | ID | What | Where | Owner | Week | Size |
 |---|---|---|---|---|---|
-| [B-0](issues/B-0.md) | Method proposal (ILP), send to professor, record reply | `docs/method_proposal.md` (new) | B2 | 1 | M |
+| [B-0](issues/B-0.md) | Method proposal (ILP via Pyomo + HiGHS), send to professor, record reply | `docs/method_proposal.md` (new) | B2 | 1 | M |
 | [B1.1](issues/B1.1.md) | Skill-fit score and Gini | `metrics.py`, `test_skill_fit_calculation`, `test_gini_calculation` | B1 | 1 | M |
 | [B1.2](issues/B1.2.md) | Solution indicators (feasibility, efficiency, fairness, capacity) | `metrics.py`, `test_solution_indicators_calculation` | B1 | 2 | L |
 | [B1.3](issues/B1.3.md) | Compare-two-solutions numbers (exact keys for the Compare page) | `metrics.py`, `test_solution_comparison` | B1 | 2 | M |
-| [B2.1](issues/B2.1.md) | PuLP model: yes/no variables and hard rules | `strategies.py`, `tests/test_solvers.py` | B2 | 2 | L |
+| [B2.1](issues/B2.1.md) | Pyomo + HiGHS model: yes/no variables and hard rules | `strategies.py`, `tests/test_solvers.py` | B2 | 2 | L |
 | [B2.2](issues/B2.2.md) | Three strategies: `PREFERENCE`, `SKILL_FIT`, `BALANCED` | `strategies.py`, `tests/test_solvers.py` | B2 | 2 | L |
 | [B2.3](issues/B2.3.md) | Distinct alternatives with no-good cuts | `strategies.py`, `test_distinct_alternatives_generation` | B2 | 2 | M |
 | [B3.1](issues/B3.1.md) | `AssignmentEngine.execute_run` (placeholder strategy first, real ones in Week 2) | `solvers.py` | B3 | 1–2 | L |
@@ -100,7 +100,7 @@ Size: S ≤ 1 h · M ≤ half day · L ≤ 1 day. Details of each issue: `docs/t
 
 ## 4. What changed from the first version (short)
 
-- Added what was missing: PuLP install (0.3), engine file split (0.5), updating tests that expect "not implemented" (B3.2), professor-approval owner (B-0).
+- Added what was missing: Pyomo + HiGHS install (0.3), engine file split (0.5), updating tests that expect "not implemented" (B3.2), professor-approval owner (B-0).
 - Team A tasks now require real test assertions, not just "page does not crash".
 - B3 starts in Week 1 with a placeholder strategy; Team A takes integration and QA tasks, so work is balanced.
 - Pre-written docs (`reproducible_demonstration.md`, `team_reflection_and_rubric.md`) must be rewritten from real results, not submitted as they are.
@@ -124,7 +124,7 @@ Size: S ≤ 1 h · M ≤ half day · L ≤ 1 day. Details of each issue: `docs/t
 │ A1       │ Skills & Projects CRUD forms│ Dynamic Requirement Matrix  │ D5 SQL docs & UI error audit│
 │ A2       │ Mock UI flow & RBAC review  │ Side-by-side /compare view  │ D8 Reproducible Demo script │
 │ B1       │ Metric equations & Gini plan│ Skill-fit, Gini & Indicators│ D6 Indicator equations & deltas│
-│ B2       │ Approval proposal & ILP math│ PuLP Solvers & No-Good Cuts │ D6 Formulation & cuts report│
+│ B2       │ Approval proposal & ILP math│ Pyomo/HiGHS Solvers & Cuts  │ D6 Formulation & cuts report│
 │ B3       │ Validation tests audit      │ execute_run & persistence   │ 7 edge cases & diagnostics  │
 └──────────┴─────────────────────────────┴─────────────────────────────┴─────────────────────────────┘
 ```
@@ -142,7 +142,7 @@ flowchart TD
 
     subgraph TeamB_Phase1["Team B (Parallel Math & Solver Build)"]
         B1_Start["Member B1: Skill Fit, Gini & Solution Indicators (Issues B1.1 & B1.2)"]
-        B2_Start["Member B2: PuLP ILP Formulation & Strategies (Issues B2.1 & B2.2)"]
+        B2_Start["Member B2: Pyomo/HiGHS ILP Formulation & Strategies (Issues B2.1 & B2.2)"]
     end
 
     subgraph TeamB_Phase2["Team B (Integration & Robustness)"]

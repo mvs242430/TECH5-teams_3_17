@@ -11,7 +11,7 @@ How to read an issue: **Labels · Owner · Week · Size** (S ≤ 1 h, M ≤ half
 
 - [0.1: Set up my computer and prove it works](0.1.md)
 - [0.2: Create the project board, labels, and PR template](0.2.md)
-- [0.3: Add the optimiser library (PuLP) to the project](0.3.md)
+- [0.3: Add the optimiser library (Pyomo) and HiGHS solver to the project](0.3.md)
 - [0.4: Fix wrong numbers in the README](0.4.md)
 - [0.5: Split the optimiser code into its own file](0.5.md)
 
