@@ -6,3 +6,11 @@ __pycache__/
 instance/*.db
 instance/*.sqlite
 
+# Operating System & IDE artifacts
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+.vscode/
+.idea/
