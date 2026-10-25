@@ -471,19 +471,55 @@ def create_skill() -> flask.Response:
 
     if not skill_id:
         flask.flash("Skill ID cannot be empty.", "danger")
-        return flask.redirect(flask.url_for("visualization_web.list_skills"))
+        skills = repositories.SkillRepository().list_all()
+        return flask.make_response(
+            flask.render_template(
+                "skills.html",
+                skills=skills,
+                form_data={
+                    "id": skill_id,
+                    "name": name,
+                    "description": description,
+                },
+                has_id_error=True,
+            )
+        )
 
     if not re.fullmatch(r"[a-z0-9_]+", skill_id):
         flask.flash(
             "Skill ID may only contain lowercase letters, digits, and underscores.",
             "danger",
         )
-        return flask.redirect(flask.url_for("visualization_web.list_skills"))
+        skills = repositories.SkillRepository().list_all()
+        return flask.make_response(
+            flask.render_template(
+                "skills.html",
+                skills=skills,
+                form_data={
+                    "id": skill_id,
+                    "name": name,
+                    "description": description,
+                },
+                has_id_error=True,
+            )
+        )
 
     skill_repo = repositories.SkillRepository()
     if skill_repo.get_by_id(skill_id) is not None:
         flask.flash(f"Skill ID '{skill_id}' already exists.", "danger")
-        return flask.redirect(flask.url_for("visualization_web.list_skills"))
+        skills = skill_repo.list_all()
+        return flask.make_response(
+            flask.render_template(
+                "skills.html",
+                skills=skills,
+                form_data={
+                    "id": skill_id,
+                    "name": name,
+                    "description": description,
+                },
+                has_id_error=True,
+            )
+        )
 
     skill_name = name or skill_id
     skill = models.Skill(id=skill_id, name=skill_name, description=description)
@@ -494,7 +530,19 @@ def create_skill() -> flask.Response:
             f"Database constraint error while saving skill: {exc}",
             "danger",
         )
-        return flask.redirect(flask.url_for("visualization_web.list_skills"))
+        skills = skill_repo.list_all()
+        return flask.make_response(
+            flask.render_template(
+                "skills.html",
+                skills=skills,
+                form_data={
+                    "id": skill_id,
+                    "name": name,
+                    "description": description,
+                },
+                has_id_error=True,
+            )
+        )
 
     flask.flash(f"Skill '{skill_name}' ({skill_id}) created successfully.", "success")
     return flask.redirect(flask.url_for("visualization_web.list_skills"))

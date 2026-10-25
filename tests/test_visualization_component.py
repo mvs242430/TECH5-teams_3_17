@@ -213,8 +213,9 @@ def test_skills_crud_workflow(tmp_path: pathlib.Path) -> None:
     )
     assert res_invalid.status_code == 200
     assert b"may only contain lowercase letters" in res_invalid.data
+    assert b"is-invalid" in res_invalid.data
 
-    # 3. Duplicate skill ID is rejected
+    # 3. Duplicate skill ID is rejected and entered form data is retained
     res_dup = client.post(
         "/skills/new",
         data={
@@ -226,6 +227,9 @@ def test_skills_crud_workflow(tmp_path: pathlib.Path) -> None:
     )
     assert res_dup.status_code == 200
     assert b"already exists" in res_dup.data
+    assert b"Python Duplicate" in res_dup.data
+    assert b"Duplicate description" in res_dup.data
+    assert b"is-invalid" in res_dup.data
     # Verify original skill was not overwritten
     re_check = repositories.SkillRepository().get_by_id("py")
     assert re_check is not None
