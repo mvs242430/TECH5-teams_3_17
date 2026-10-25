@@ -13,15 +13,56 @@
         TECH5 <span>Decision Support</span>
       </a>
 
+      {# Highlight the active navigation tab based on the current Flask request path/endpoint #}
       <ul class="nav-links">
-        <li><a href="{{ url_for('visualization_web.dashboard') }}">Dashboard</a></li>
-        <li><a href="{{ url_for('visualization_web.list_students') }}">Students</a></li>
-        <li><a href="{{ url_for('visualization_web.list_projects') }}">Projects</a></li>
-        <li><a href="{{ url_for('visualization_web.preferences_overview') }}">Preferences</a></li>
-        <li><a href="{{ url_for('visualization_web.list_fixed_assignments') }}">Fixed Locks</a></li>
-        <li><a href="{{ url_for('visualization_web.list_skills') }}">Skills</a></li>
-        <li><a href="{{ url_for('visualization_web.scenarios_page') }}">Scenarios</a></li>
-        <li><a href="{{ url_for('visualization_web.compare_solutions') }}">Compare</a></li>
+        <li>
+          <a href="{{ url_for('visualization_web.dashboard') }}"
+             class="{% if request.endpoint in ('visualization_web.dashboard', 'visualization_web.view_run', 'visualization_web.view_solution', 'visualization_web.view_recommendations') %}active{% endif %}">
+            Dashboard
+          </a>
+        </li>
+        <li>
+          <a href="{{ url_for('visualization_web.list_students') }}"
+             class="{% if request.path.startswith(url_for('visualization_web.list_students')) %}active{% endif %}">
+            Students
+          </a>
+        </li>
+        <li>
+          <a href="{{ url_for('visualization_web.list_projects') }}"
+             class="{% if request.path.startswith(url_for('visualization_web.list_projects')) %}active{% endif %}">
+            Projects
+          </a>
+        </li>
+        <li>
+          <a href="{{ url_for('visualization_web.preferences_overview') }}"
+             class="{% if request.path.startswith(url_for('visualization_web.preferences_overview')) %}active{% endif %}">
+            Preferences
+          </a>
+        </li>
+        <li>
+          <a href="{{ url_for('visualization_web.list_fixed_assignments') }}"
+             class="{% if request.path.startswith(url_for('visualization_web.list_fixed_assignments')) %}active{% endif %}">
+            Fixed Locks
+          </a>
+        </li>
+        <li>
+          <a href="{{ url_for('visualization_web.list_skills') }}"
+             class="{% if request.path.startswith(url_for('visualization_web.list_skills')) %}active{% endif %}">
+            Skills
+          </a>
+        </li>
+        <li>
+          <a href="{{ url_for('visualization_web.scenarios_page') }}"
+             class="{% if request.path.startswith(url_for('visualization_web.scenarios_page')) %}active{% endif %}">
+            Scenarios
+          </a>
+        </li>
+        <li>
+          <a href="{{ url_for('visualization_web.compare_solutions') }}"
+             class="{% if request.path.startswith(url_for('visualization_web.compare_solutions')) %}active{% endif %}">
+            Compare
+          </a>
+        </li>
       </ul>
 
       <div class="nav-role-switcher">

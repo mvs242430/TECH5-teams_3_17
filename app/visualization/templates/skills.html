@@ -226,15 +226,5 @@
       closeDeleteModal();
     }
   });
-
-  // Mark Skills tab as active in the top navigation bar
-  document.addEventListener("DOMContentLoaded", function () {
-    const navLinks = document.querySelectorAll(".nav-links a");
-    navLinks.forEach(function (link) {
-      if (link.getAttribute("href") === "{{ url_for('visualization_web.list_skills') }}") {
-        link.classList.add("active");
-      }
-    });
-  });
 </script>
 {% endblock %}
