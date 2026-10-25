@@ -17,9 +17,39 @@ def calculate_assignment_skill_fit(
     student: models.Student,
     project: models.Project,
 ) -> tuple[float, list[str]]:
-    """Calculates skill fit score and unmet requirements for a student-project pair.
 
-    In compliance with Section 7.2 of the TECH5 specification, skill fit
+    if not project.requirements:
+        return 1.0, []
+
+    scores = []
+    unmet = []
+
+    for requirement in project.requirements:
+        student_level = student.get_skill_level(requirement.skill_id)
+        required_level = requirement.minimum_level
+
+        # Avoid division by zero
+        if required_level <= 0:
+            score = 1.0
+        else:
+            score = min(student_level / required_level, 1.0)
+
+        scores.append(score)
+
+        if student_level < required_level:
+            unmet.append(requirement.skill_id)
+    
+
+    skill_fit_score = sum(scores) / len(scores)
+
+    return skill_fit_score, unmet
+
+
+
+    """Calculates skill fit score and unmet requirements for a student-project pair."""
+
+    
+    """In compliance with Section 7.2 of the TECH5 specification, skill fit
     evaluates how well the candidate student satisfies the required technical
     skills of the target project.
 
@@ -38,7 +68,33 @@ def calculate_assignment_skill_fit(
     )
 
 
+
 def calculate_gini(values: list[float]) -> float:
+
+    for value in values:
+        if value < 0:
+            raise ValueError("Gini coefficient requires non-negative values.")
+
+    if not values:
+        return 0.0
+
+    total = sum(values)
+    if total == 0:
+        return 0.0
+
+    # Calculate Gini coefficient with formula: 
+    # G = (1/(2*n^2*mean)) * sum_i sum_j |x_i - x_j|
+
+    difference = 0.0
+
+    for value_i in values:
+        for value_j in values:
+            difference += abs(value_i - value_j)
+
+    gini = difference / (2*len(values) * total)
+    
+    return gini
+
     """Calculates the Gini coefficient of inequality for non-negative values.
 
     In compliance with Section 7.3 of the TECH5 specification, the Gini
@@ -63,6 +119,88 @@ def compute_solution_indicators(
     assignments: list[models.Assignment],
     fixed_assignments: list[models.FixedAssignment] | None = None,
 ) -> dict[str, Any]:
+
+    # check for fixed assignments
+    if fixed_assignments is None:
+        fixed_assignments = []
+
+    # create dictionaries for quick lookup
+    student_dict = {}
+    for student in students:
+        student_dict[student.id] = student
+
+    project_dict = {}
+    for project in projects:
+        project_dict[project.id] = project
+
+    """Feasibility"""
+
+    violations = []
+    assigned_students = set()
+
+    project_counts = {}
+    for project in projects:
+        project_counts[project.id] = 0
+
+    for assignment in assignments:
+
+        if assignment.student_id not in student_dict:
+            violations.append(f"Unknown student: {assignment.student_id}")
+            continue
+
+        if assignment.project_id not in project_dict:
+            violations.append(f"Unknown project: {assignment.project_id}")
+            continue
+
+        if assignment.student_id in assigned_students:
+            violations.append(f"Student assigned multiple times: {assignment.student_id}")
+            continue
+
+    assigned_students.add(assignment.student_id)
+    project_counts[assignment.project_id] += 1
+
+    student = student_dict[assignment.student_id]
+    project = project_dict[assignment.project_id]
+
+    # Check mandatory skill requirements
+    for requirement in project.requirements:
+        if requirement.is_mandatory:
+            student_level = student.get_skill_level(requirement.skill_id)
+
+            if student_level < requirement.minimum_level:
+                violations.append(f"Student {student.id} does not meet mandatory skill {requirement.skill_id}")
+
+    # Check for unassigned students
+    for student in students:
+        if student.id not in assigned_students:
+            violations.append(f"Student {student.id} is unassigned")
+
+    # Check project capacity
+    if project in projects:
+        count = project_counts[project.id]
+
+        if count < project.min_capacity:
+            violations.append(f"Project {project.id} is below minimum capacity")
+
+        if count > project.max_capacity:
+            violations.append(f"Project {project.id} exceeds maximum capacity")
+
+# check fixed assignments
+student_assignments = {}
+for assignment in assignments:
+    student_assignments[assignment.student_id] = assignment
+
+    for fixed in fixed_assignments:
+        if fixed.student_id not in student_assignments:
+            violations.append(f"Fixed assignment for unassigned student: {fixed.student_id} was not respected")
+
+        elif (student_assignments[fixed.student_id] != fixed.project_id):
+            violations.append(f"Fixed assignment violation for student {fixed.student_id}: expected {fixed.project_id}, got {student_assignments[fixed.student_id].project_id}")
+
+    is_feasible = len(violations) == 0
+        
+
+    
     """Computes comprehensive feasibility, efficiency, and fairness indicators.
 
     Evaluates a solution across the four dimensions defined in the specification:
