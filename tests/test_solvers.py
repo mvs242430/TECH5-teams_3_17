@@ -1,10 +1,12 @@
 """Unit tests for optimization solvers and distinct alternative generation."""
 
 import pytest
+import pyomo.environ as pyo
 
 from app.contract import contract
 from app.domain import models
 from app.engine import solvers
+from app.engine import strategies
 from app.samples import demo_data
 
 
@@ -33,6 +35,82 @@ def test_assignment_engine_raises_not_implemented() -> None:
     with pytest.raises(NotImplementedError) as exc_info:
         engine.execute_run(request)
     assert "TODO (Team B)" in str(exc_info.value)
+
+
+def test_base_model_solves_tiny_case() -> None:
+    students = [
+        models.Student(id="S1", display_name="Student 1"),
+        models.Student(id="S2", display_name="Student 2"),
+        models.Student(id="S3", display_name="Student 3"),
+    ]
+    projects = [
+        models.Project(id="P1", title="Project 1", max_capacity=2),
+        models.Project(id="P2", title="Project 2", min_capacity=1, max_capacity=2),
+    ]
+
+    model, variables = strategies._build_base_model(students, projects)
+
+    results = model.solver.solve(model)
+    assert results.solver.termination_condition == pyo.TerminationCondition.optimal
+    assert sum(
+        pyo.value(variables[student.id, project.id])
+        for student in students
+        for project in projects
+    ) == len(students)
+
+
+def test_base_model_honours_fixed_lock() -> None:
+    students = [
+        models.Student(id="S1", display_name="Student 1"),
+        models.Student(id="S2", display_name="Student 2"),
+    ]
+    projects = [
+        models.Project(id="P1", title="Project 1", max_capacity=2),
+        models.Project(id="P2", title="Project 2", max_capacity=2),
+    ]
+
+    model, variables = strategies._build_base_model(
+        students,
+        projects,
+        [models.FixedAssignment(student_id="S1", project_id="P2")],
+    )
+
+    results = model.solver.solve(model)
+    assert results.solver.termination_condition == pyo.TerminationCondition.optimal
+    assert pyo.value(variables["S1", "P2"]) == 1
+
+
+def test_base_model_forbids_students_below_mandatory_skill() -> None:
+    students = [
+        models.Student(id="S1", display_name="Student 1", skills={"python": 1}),
+        models.Student(id="S2", display_name="Student 2", skills={"python": 3}),
+    ]
+    projects = [
+        models.Project(
+            id="P1",
+            title="Python Project",
+            min_capacity=1,
+            max_capacity=1,
+            requirements=[
+                models.ProjectRequirement(
+                    project_id="P1",
+                    skill_id="python",
+                    minimum_level=2,
+                    is_mandatory=True,
+                )
+            ],
+        ),
+        models.Project(
+            id="P2", title="Other Project", min_capacity=1, max_capacity=1
+        ),
+    ]
+
+    model, variables = strategies._build_base_model(students, projects)
+
+    results = model.solver.solve(model)
+    assert results.solver.termination_condition == pyo.TerminationCondition.optimal
+    assert pyo.value(variables["S1", "P1"]) == 0
+    assert pyo.value(variables["S2", "P1"]) == 1
 
 
 @pytest.mark.xfail(
