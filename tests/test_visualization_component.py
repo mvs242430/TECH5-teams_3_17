@@ -268,17 +268,22 @@ def test_skills_crud_workflow(tmp_path: pathlib.Path) -> None:
     assert repositories.SkillRepository().get_by_id("py") is None
 
 
-@pytest.mark.xfail(
-    raises=NotImplementedError,
-    reason="TODO (Team A): Implement project CRUD",
-)
 def test_projects_crud_workflow(tmp_path: pathlib.Path) -> None:
     """Verifies project addition workflow (Team A implementation)."""
     db_file = tmp_path / "test_proj.db"
     app = create_app({"TESTING": True, "DATABASE_PATH": db_file})
     client = app.test_client()
 
-    client.post(
+    # 1. Admin login
+    client.post("/set-role", data={"role": "ADMIN"}, follow_redirects=True)
+
+    # Seed skill to associate with project requirement
+    repositories.SkillRepository().save(
+        models.Skill(id="py", name="Python", description="Python Programming")
+    )
+
+    # 2. Admin creates a new project with one mandatory requirement
+    res = client.post(
         "/projects/new",
         data={
             "id": "P1",
@@ -286,9 +291,164 @@ def test_projects_crud_workflow(tmp_path: pathlib.Path) -> None:
             "description": "Risk analytics",
             "min_capacity": 1,
             "max_capacity": 2,
+            "req_level_py": 3,
+            "req_mand_py": 1,
         },
         follow_redirects=True,
     )
+    assert res.status_code == 200
+    assert (
+        b"Project 'P1' created." in res.data
+        or b"Project &#39;P1&#39; created." in res.data
+    )
+
+    saved = repositories.ProjectRepository().get_by_id("P1")
+    assert saved is not None
+    assert saved.id == "P1"
+    assert saved.title == "FinTech Risk"
+    assert saved.description == "Risk analytics"
+    assert saved.min_capacity == 1
+    assert saved.max_capacity == 2
+    assert len(saved.requirements) == 1
+    req = saved.requirements[0]
+    assert req.skill_id == "py"
+    assert req.minimum_level == 3
+    assert req.is_mandatory is True
+
+    # 3. Duplicate project ID is rejected and does not overwrite existing record
+    res_dup = client.post(
+        "/projects/new",
+        data={
+            "id": "P1",
+            "title": "FinTech Risk Overwrite Attempt",
+            "description": "Overwriting",
+            "min_capacity": 2,
+            "max_capacity": 4,
+            "req_level_py": 5,
+        },
+        follow_redirects=True,
+    )
+    assert res_dup.status_code == 200
+    assert b"already exists" in res_dup.data
+    re_check = repositories.ProjectRepository().get_by_id("P1")
+    assert re_check is not None
+    assert re_check.title == "FinTech Risk"
+    assert re_check.min_capacity == 1
+    assert re_check.max_capacity == 2
+    assert len(re_check.requirements) == 1
+    assert re_check.requirements[0].minimum_level == 3
+
+    # 4. min_capacity > max_capacity is rejected and not saved
+    res_invalid = client.post(
+        "/projects/new",
+        data={
+            "id": "P2",
+            "title": "Invalid Capacity Project",
+            "description": "Min exceeds max",
+            "min_capacity": 5,
+            "max_capacity": 2,
+        },
+        follow_redirects=True,
+    )
+    assert res_invalid.status_code == 200
+    assert (
+        b"Minimum capacity cannot exceed maximum capacity" in res_invalid.data
+    )
+    assert repositories.ProjectRepository().get_by_id("P2") is None
+
+    # 5. Edit page shows the saved level
+    res_get_edit = client.get("/projects/P1/edit")
+    assert res_get_edit.status_code == 200
+    assert b"FinTech Risk" in res_get_edit.data
+    assert b'name="req_level_py"' in res_get_edit.data
+    assert b'value="3"' in res_get_edit.data
+
+    # 6. Admin edits the project (changes title, requirement level, unticks mandatory)
+    res_edit = client.post(
+        "/projects/P1/edit",
+        data={
+            "title": "FinTech Advanced Analytics",
+            "description": "Updated risk analytics scope",
+            "min_capacity": 2,
+            "max_capacity": 4,
+            "req_level_py": 4,
+            # req_mand_py unticked / omitted
+        },
+        follow_redirects=True,
+    )
+    assert res_edit.status_code == 200
+    assert (
+        b"Project 'P1' updated." in res_edit.data
+        or b"Project &#39;P1&#39; updated." in res_edit.data
+    )
+
+    updated = repositories.ProjectRepository().get_by_id("P1")
+    assert updated is not None
+    assert updated.title == "FinTech Advanced Analytics"
+    assert updated.min_capacity == 2
+    assert updated.max_capacity == 4
+    assert len(updated.requirements) == 1
+    req_updated = updated.requirements[0]
+    assert req_updated.skill_id == "py"
+    assert req_updated.minimum_level == 4
+    assert req_updated.is_mandatory is False
+
+    # 7. Seed student preference on P1 and verify delete cascades
+    repositories.StudentRepository().save(
+        models.Student(
+            id="S1",
+            display_name="Student One",
+            preferences=[
+                models.Preference(student_id="S1", project_id="P1", rank=1)
+            ],
+        )
+    )
+
+    res_del = client.post("/projects/P1/delete", follow_redirects=True)
+    assert res_del.status_code == 200
+    assert (
+        b"Project 'P1' deleted" in res_del.data
+        or b"Project &#39;P1&#39; deleted" in res_del.data
+    )
+    assert (
+        b"1 student preferences removed" in res_del.data
+        or b"student preferences removed" in res_del.data
+    )
+    assert repositories.ProjectRepository().get_by_id("P1") is None
+
+    # 8. Student Viewer gets "Permission denied" on create, edit, and delete
+    client.post("/set-role", data={"role": "STUDENT"}, follow_redirects=True)
+
+    # Student Viewer denied on create
+    res_student_create = client.post(
+        "/projects/new",
+        data={
+            "id": "P_DENIED",
+            "title": "Unauthorized Project",
+            "min_capacity": 1,
+            "max_capacity": 2,
+        },
+        follow_redirects=True,
+    )
+    assert res_student_create.status_code == 200
+    assert b"Permission denied" in res_student_create.data
+    assert repositories.ProjectRepository().get_by_id("P_DENIED") is None
+
+    # Student Viewer denied on edit
+    res_student_edit = client.post(
+        "/projects/P1/edit",
+        data={"title": "Unauthorized Edit"},
+        follow_redirects=True,
+    )
+    assert res_student_edit.status_code == 200
+    assert b"Permission denied" in res_student_edit.data
+
+    # Student Viewer denied on delete
+    res_student_delete = client.post(
+        "/projects/P1/delete", follow_redirects=True
+    )
+    assert res_student_delete.status_code == 200
+    assert b"Permission denied" in res_student_delete.data
 
 
 @pytest.mark.xfail(
