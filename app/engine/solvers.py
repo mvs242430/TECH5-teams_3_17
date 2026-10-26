@@ -9,7 +9,9 @@ that implements AssignmentEngineContract.
 """
 
 import abc
+import datetime
 import logging
+import time
 from typing import Any
 import uuid
 
@@ -103,11 +105,15 @@ class AssignmentEngine(contract.AssignmentEngineContract):
         Args:
             run_repo: Optional repository for persisting runs and solutions.
         """
+        from app.engine import strategies
+
         self.run_repo = (
             run_repo if run_repo is not None else repositories.RunRepository()
         )
         self.strategies: dict[str, AssignmentStrategy] = {
-            # Team B: Instantiate and register your custom strategies here
+            "PREFERENCE": strategies.PreferenceOrientedSolver(),
+            "SKILL_FIT": strategies.SkillFitOrientedSolver(),
+            "BALANCED": strategies.BalancedTradeoffSolver(),
         }
 
     def validate_inputs(
@@ -153,13 +159,274 @@ class AssignmentEngine(contract.AssignmentEngineContract):
 
         Returns:
             The created AssignmentRun populated with alternative solutions.
-
-        Raises:
-            NotImplementedError: To be implemented by Team B.
         """
-        raise NotImplementedError(
-            "TODO (Team B): Implement execute_run in app/engine/solvers.py"
+        start_time = time.perf_counter()
+        run_id = str(uuid.uuid4())
+        created_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+        # Ensure schema exists for standalone unit tests running outside Flask.
+        self.run_repo.db.initialize_schema()
+
+        primary_strategy = (
+            request.strategy_key
+            if request.strategy_key in self.strategies
+            else "PREFERENCE"
         )
+        num_vars = len(request.students) * len(request.projects)
+        num_constraints = len(request.students) + 2 * len(request.projects) + len(
+            request.fixed_assignments or []
+        )
+        config_dict: dict[str, Any] = {
+            "max_alternatives": request.max_alternatives,
+            "primary_strategy": request.strategy_key,
+            "strategy_key": request.strategy_key,
+            "engine": "AssignmentEngine",
+            "notes": request.notes,
+        }
+
+        val_outcome = self.validate_inputs(request)
+
+        # Case A: Pre-solver mathematical infeasibility (e.g., capacity deficit).
+        if not val_outcome.is_feasible:
+            reasons = list(val_outcome.infeasibility_reasons)
+            if not reasons and val_outcome.errors:
+                reasons = list(val_outcome.errors)
+            elapsed = round(time.perf_counter() - start_time, 4)
+            run = models.AssignmentRun(
+                id=run_id,
+                created_at=created_at,
+                status=contract.RunStatus.INFEASIBLE.value,
+                configuration=config_dict,
+                solutions=[],
+                diagnostics={
+                    "solver_status": "INFEASIBLE",
+                    "strategy": primary_strategy,
+                    "solve_time_seconds": elapsed,
+                    "variables": num_vars,
+                    "constraints": num_constraints,
+                    "alternatives_found": 0,
+                    "distinct_alternatives": 0,
+                    "reasons": reasons,
+                    "errors": list(val_outcome.errors),
+                    "warnings": list(val_outcome.warnings),
+                    "notes": request.notes,
+                    "message": (
+                        "Run proved mathematically infeasible before solver "
+                        "execution."
+                    ),
+                },
+            )
+            self.run_repo.save_run(run)
+            return run
+
+        # Case B: Structural validation errors (e.g., contradictory fixed locks).
+        if not val_outcome.is_valid:
+            elapsed = round(time.perf_counter() - start_time, 4)
+            run = models.AssignmentRun(
+                id=run_id,
+                created_at=created_at,
+                status=contract.RunStatus.INVALID_INPUT.value,
+                configuration=config_dict,
+                solutions=[],
+                diagnostics={
+                    "solver_status": "INVALID_INPUT",
+                    "strategy": primary_strategy,
+                    "solve_time_seconds": elapsed,
+                    "variables": num_vars,
+                    "constraints": num_constraints,
+                    "alternatives_found": 0,
+                    "distinct_alternatives": 0,
+                    "reasons": list(val_outcome.errors),
+                    "errors": list(val_outcome.errors),
+                    "warnings": list(val_outcome.warnings),
+                    "notes": request.notes,
+                    "message": (
+                        "Input cohort failed pre-solver validation checks."
+                    ),
+                },
+            )
+            self.run_repo.save_run(run)
+            return run
+
+        # Synchronize skills, projects, students, and fixed assignments to DB
+        # so foreign-key constraints on solutions and assignments are satisfied.
+        skill_repo = repositories.SkillRepository(db=self.run_repo.db)
+        known_skill_ids: set[str] = set()
+        for sk in request.skills or []:
+            skill_repo.save(sk)
+            known_skill_ids.add(sk.id)
+
+        # Ensure any uncatalogued skills referenced by students or projects are
+        # also present in the skills table to satisfy foreign-key constraints.
+        for proj in request.projects:
+            for req in proj.requirements:
+                if req.skill_id not in known_skill_ids:
+                    skill_repo.save(
+                        models.Skill(id=req.skill_id, name=req.skill_id)
+                    )
+                    known_skill_ids.add(req.skill_id)
+        for stud in request.students:
+            for sk_id in stud.skills:
+                if sk_id not in known_skill_ids:
+                    skill_repo.save(models.Skill(id=sk_id, name=sk_id))
+                    known_skill_ids.add(sk_id)
+
+        proj_repo = repositories.ProjectRepository(db=self.run_repo.db)
+        for proj in request.projects:
+            proj_repo.save(proj)
+
+        stud_repo = repositories.StudentRepository(db=self.run_repo.db)
+        for stud in request.students:
+            stud_repo.save(stud)
+
+        if request.fixed_assignments:
+            fixed_repo = repositories.FixedAssignmentRepository(
+                db=self.run_repo.db
+            )
+            for fa in request.fixed_assignments:
+                fixed_repo.save(fa)
+
+        # Build strategy rotation starting with the requested primary strategy
+        # so multi-alternative runs explore preference, skill-fit, and balanced
+        # perspectives while enforcing integer no-good cuts across all solves.
+        strategy_order = [primary_strategy] + [
+            key
+            for key in ("PREFERENCE", "SKILL_FIT", "BALANCED")
+            if key != primary_strategy and key in self.strategies
+        ]
+        max_alts = max(1, request.max_alternatives)
+        solutions: list[models.Solution] = []
+        excluded_solutions: list[list[tuple[str, str]]] = []
+        last_solver_diag: dict[str, Any] = {}
+
+        for alt_idx in range(max_alts):
+            strat_key = strategy_order[alt_idx % len(strategy_order)]
+            strategy = self.strategies[strat_key]
+            solver_status, assignments, obj_val, sol_diag = strategy.solve(
+                students=request.students,
+                projects=request.projects,
+                fixed_assignments=request.fixed_assignments,
+                excluded_solutions=excluded_solutions,
+            )
+            last_solver_diag = sol_diag
+
+            if solver_status != "OPTIMAL" or not assignments:
+                # If switching strategy failed to find a new solution, try the
+                # primary strategy once more with the current no-good cuts.
+                if strat_key != primary_strategy:
+                    primary_solver = self.strategies[primary_strategy]
+                    (
+                        solver_status,
+                        assignments,
+                        obj_val,
+                        sol_diag,
+                    ) = primary_solver.solve(
+                        students=request.students,
+                        projects=request.projects,
+                        fixed_assignments=request.fixed_assignments,
+                        excluded_solutions=excluded_solutions,
+                    )
+                    strat_key = primary_strategy
+                    last_solver_diag = sol_diag
+
+                if solver_status != "OPTIMAL" or not assignments:
+                    break
+
+            indicators = metrics.compute_solution_indicators(
+                students=request.students,
+                projects=request.projects,
+                assignments=assignments,
+                fixed_assignments=request.fixed_assignments,
+            )
+            sol = models.Solution(
+                id=str(uuid.uuid4()),
+                run_id=run_id,
+                alternative_number=len(solutions) + 1,
+                strategy_name=strat_key,
+                objective_value=(
+                    round(float(obj_val), 4) if obj_val is not None else 0.0
+                ),
+                assignments=assignments,
+                indicators=indicators,
+                warnings=list(val_outcome.warnings),
+                diagnostics=sol_diag,
+            )
+            solutions.append(sol)
+            excluded_solutions.append(
+                [(a.student_id, a.project_id) for a in assignments]
+            )
+
+        elapsed = round(time.perf_counter() - start_time, 4)
+
+        if not solutions:
+            reasons = list(val_outcome.infeasibility_reasons)
+            if not reasons:
+                reasons = [
+                    "Solver proved the MILP formulation infeasible under the "
+                    "combined capacity, mandatory skill, and fixed-lock "
+                    "constraints. Try relaxing mandatory skill levels, "
+                    "reducing project minimum capacities, or removing fixed "
+                    "locks."
+                ]
+            run = models.AssignmentRun(
+                id=run_id,
+                created_at=created_at,
+                status=contract.RunStatus.INFEASIBLE.value,
+                configuration=config_dict,
+                solutions=[],
+                diagnostics={
+                    "solver_status": "INFEASIBLE",
+                    "strategy": primary_strategy,
+                    "solve_time_seconds": elapsed,
+                    "variables": last_solver_diag.get(
+                        "num_variables", num_vars
+                    ),
+                    "constraints": last_solver_diag.get(
+                        "num_constraints", num_constraints
+                    ),
+                    "alternatives_found": 0,
+                    "distinct_alternatives": 0,
+                    "reasons": reasons,
+                    "errors": list(val_outcome.errors),
+                    "warnings": list(val_outcome.warnings),
+                    "notes": request.notes,
+                    "message": (
+                        "Solver could not find a feasible allocation "
+                        "satisfying all hard constraints."
+                    ),
+                },
+            )
+            self.run_repo.save_run(run)
+            return run
+
+        run = models.AssignmentRun(
+            id=run_id,
+            created_at=created_at,
+            status=contract.RunStatus.COMPLETED.value,
+            configuration=config_dict,
+            solutions=solutions,
+            diagnostics={
+                "solver_status": "Optimal",
+                "strategy": primary_strategy,
+                "solve_time_seconds": elapsed,
+                "variables": last_solver_diag.get("num_variables", num_vars),
+                "constraints": last_solver_diag.get(
+                    "num_constraints", num_constraints
+                ),
+                "solution_count": len(solutions),
+                "alternatives_found": len(solutions),
+                "distinct_alternatives": len(solutions),
+                "reasons": [],
+                "warnings": list(val_outcome.warnings),
+                "notes": request.notes,
+                "message": (
+                    f"Optimization completed in {elapsed}s with "
+                    f"{len(solutions)} distinct alternative(s)."
+                ),
+            },
+        )
+        self.run_repo.save_run(run)
+        return run
 
     def run_assignment(
         self,
