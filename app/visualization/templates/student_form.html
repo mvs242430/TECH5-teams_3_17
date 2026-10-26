@@ -46,6 +46,7 @@
         <span class="form-hint">
           {% if projects %}
             Enter project IDs in order of preference (1st choice, 2nd choice, etc.), separated by commas.
+            List each project only once; at least 3 choices are recommended.
             Available projects: {% for p in projects %}<code>{{ p.id }}</code> ({{ p.title }}){% if not loop.last %}, {% endif %}{% endfor %}.
           {% else %}
             <span style="color: var(--danger); font-weight: 600;">Notice: No projects exist in the catalog yet. Create projects first before assigning preferences.</span>
