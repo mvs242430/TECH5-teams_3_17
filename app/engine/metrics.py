@@ -116,6 +116,7 @@ def compute_solution_indicators(
     # Store violations and assigned students
     violations = []
     assigned_students = set()
+    valid_assignments = []
 
     # Count assignments per project
     project_counts = {}
@@ -143,6 +144,8 @@ def compute_solution_indicators(
         # Register student as assigned and increment project count
         assigned_students.add(assignment.student_id)
         project_counts[assignment.project_id] += 1
+        # Exclude unknown IDs and duplicates from the calculated metrics.
+        valid_assignments.append(assignment)
 
         # Get student and project objects
         student = student_dict[assignment.student_id]
@@ -174,7 +177,7 @@ def compute_solution_indicators(
 
     # Create a dictionary of student assignments
     student_assignments = {}
-    for assignment in assignments:
+    for assignment in valid_assignments:
         student_assignments[assignment.student_id] = assignment
 
     # Check if fixed assignments are respected
@@ -194,12 +197,12 @@ def compute_solution_indicators(
     total_skill_fit = 0.0
     unmet_requirements = 0
 
-    for assignment in assignments:
+    for assignment in valid_assignments:
         # Calculate skill fit score for each assignment
         total_skill_fit += assignment.skill_fit_score
 
         # Get project for this assignment
-        project = project_dict[assignment.project_id]
+        project = project_dict.get(assignment.project_id)
 
         # Counts unmet soft requirements (non-mandatory)
         if project is not None:
@@ -209,8 +212,8 @@ def compute_solution_indicators(
                         unmet_requirements += 1
 
     # Calculate mean skill fit score
-    if assignments:
-        mean_skill_fit = total_skill_fit / len(assignments)
+    if valid_assignments:
+        mean_skill_fit = total_skill_fit / len(valid_assignments)
     else:
         mean_skill_fit = 0.0
 
@@ -222,7 +225,7 @@ def compute_solution_indicators(
     unranked_count = 0
 
     # Count preference ranks and unranked students
-    for assignment in assignments:
+    for assignment in valid_assignments:
         if assignment.preference_rank is None:
             unranked_count += 1
         else:
@@ -311,7 +314,7 @@ def compute_solution_indicators(
 
     # Total capacity utilization across all projects
     if total_capacity > 0:
-        overall_utilization = len(assignments) / total_capacity * 100
+        overall_utilization = len(valid_assignments) / total_capacity * 100
     else:
         overall_utilization = 0.0
 
@@ -322,7 +325,7 @@ def compute_solution_indicators(
         "feasibility": {
             "is_feasible": is_feasible,
             "violations": violations,
-            "assigned_count": len(assignments),
+            "assigned_count": len(valid_assignments),
             "total_students": len(students),    
             },
         "efficiency": {
@@ -340,7 +343,7 @@ def compute_solution_indicators(
             "rank_variance": rank_variance,
             },
         "capacity": {
-            "total_assigned": len(assignments),
+            "total_assigned": len(valid_assignments),
             "total_capacity": total_capacity,
             "overall_utilization_pct": overall_utilization,
             "projects": project_utilization,
@@ -364,6 +367,9 @@ def compare_two_solutions(
     for assignment in solution_b.assignments:
         assignments_b[assignment.student_id] = assignment
 
+    # Both solutions must have the same students to compare
+    if assignments_a.keys() != assignments_b.keys():
+        raise ValueError("Solutions must have the same students to compare.")
 
     # Find penalty rank for unranked assignments
     all_ranks = []
@@ -372,25 +378,26 @@ def compare_two_solutions(
         if assignment.preference_rank is not None:
             all_ranks.append(assignment.preference_rank)
 
+    for assignment in solution_b.assignments:
+        if assignment.preference_rank is not None:
+            all_ranks.append(assignment.preference_rank)
 
     if all_ranks:
         unranked_rank = max(all_ranks) + 1
     else:
         unranked_rank = 1
 
-    # Compare assignments
+    # Store changed assignments and counts of rank improvements/worsenings
     changed_assignments = []
     rank_improved_count = 0
     rank_worsened_count = 0
 
+    # Compare each student's assignment in solution A and B
     for student_id in assignments_a:
-        if student_id not in assignments_b:
-            continue
-
         assignment_a = assignments_a[student_id]
         assignment_b = assignments_b[student_id]
 
-        # Record students who project changed
+        # Record students whose project changed
         if assignment_a.project_id != assignment_b.project_id:
             rank_a = assignment_a.preference_rank
             rank_b = assignment_b.preference_rank
@@ -481,7 +488,9 @@ def compare_two_solutions(
     # Return comparison results
     return {
         "solution_a_id": solution_a.id,
+        "solution_a_alt": solution_a.alternative_number,
         "solution_b_id": solution_b.id,
+        "solution_b_alt": solution_b.alternative_number,
         "is_distinct": len(changed_assignments) > 0,
         "changed_students_count": len(changed_assignments),
         "total_students": len(solution_a.assignments),
