@@ -18,15 +18,21 @@
 </div>
 
 {% if recommendations %}
+  <style>
+    .kpi-accent-1 { border-left: 4px solid var(--success); }
+    .kpi-accent-2 { border-left: 4px solid var(--primary); }
+    .kpi-accent-3 { border-left: 4px solid var(--secondary); }
+    .card-accent-1 { border-left: 5px solid var(--success); }
+    .card-accent-2 { border-left: 5px solid var(--primary); }
+    .card-accent-3 { border-left: 5px solid #475569; }
+  </style>
+
   {# ── At-a-glance summary strip ─────────────────────────────────────────── #}
   <div class="kpi-grid" style="margin-bottom: 2rem;">
     {% for rec in recommendations %}
       <a href="#rec-{{ loop.index }}"
-         class="kpi-card"
-         style="text-decoration: none; border-left: 4px solid
-           {% if loop.index == 1 %}var(--success)
-           {% elif loop.index == 2 %}var(--primary)
-           {% else %}var(--secondary){% endif %};">
+         class="kpi-card {% if loop.index == 1 %}kpi-accent-1{% elif loop.index == 2 %}kpi-accent-2{% else %}kpi-accent-3{% endif %}"
+         style="text-decoration: none;">
         <span class="kpi-label">{{ rec.priority_focus }}</span>
         <span class="kpi-value" style="font-size: 1.4rem;">Alt #{{ rec.recommended_alternative_number }}</span>
         <span class="kpi-sub">
@@ -42,11 +48,8 @@
     {% for rec in recommendations %}
       {% set next_rec = recommendations[(loop.index) % recommendations|length] %}
       <div id="rec-{{ loop.index }}"
-           class="card"
-           style="margin-bottom: 0; border-left: 5px solid
-             {% if loop.index == 1 %}var(--success)
-             {% elif loop.index == 2 %}var(--primary)
-             {% else %}#475569{% endif %};">
+           class="card {% if loop.index == 1 %}card-accent-1{% elif loop.index == 2 %}card-accent-2{% else %}card-accent-3{% endif %}"
+           style="margin-bottom: 0;">
 
         {# Card header ─────────────────────────────────────────────────────── #}
         <div class="card-header">
