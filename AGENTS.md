@@ -96,3 +96,22 @@ Detailed rule specification is maintained in [`.agents/rules/google_python_style
 
 Detailed rule specification is maintained in [`.agents/rules/git_and_qa_workflow.md`](.agents/rules/git_and_qa_workflow.md).
 
+---
+
+## 7. Mandatory Issue Solution Documentation Rule
+
+> **Policy Directive:** For every issue implemented from `docs/team_related/issues/`, the agent must persistently document the architectural rationale, data flow, files modified, test evidence, and pedagogical checkpoint in a dedicated markdown file under `docs/team_related/issues_solutions/<ISSUE_ID>_solution.md` before committing.
+
+### Standards Required:
+1. **Standard Path & Naming:** Save to `docs/team_related/issues_solutions/<ISSUE_ID>_solution.md` (e.g., `A1.1_solution.md`, `B1.1_solution.md`).
+2. **Required Structure:** Include:
+   - Architectural Pattern Applied & Rationale
+   - High-Level Logic & Data Flow Walkthrough
+   - Summary of Files Changed
+   - Verification & Pytest Output
+   - Pedagogical Checkpoint ("Check Your Understanding" self-defense questions)
+3. **Commit Inclusion:** The solution file must be staged (`git add`) and committed on the feature branch together with the code changes.
+4. **Iterative Updates:** If user feedback or code review prompts subsequent enhancements, append those updates to the existing solution document.
+
+Detailed rule specification is maintained in [`.agents/rules/solution_documentation.md`](.agents/rules/solution_documentation.md).
+

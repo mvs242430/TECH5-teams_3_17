@@ -40,3 +40,7 @@ At the end of every code proposal or modification, include a short **"Check Your
   - All inter-component communication must go through `AssignmentEngineContract`.
   - Database persistence stays inside `app/persistence/`.
 - **Honest Diagnostics:** When an allocation is infeasible or inputs are invalid, produce clear diagnostic root-causes rather than masking errors or crashing.
+
+### 6. Persist Rationale to Disk (`docs/team_related/issues_solutions/`)
+In addition to explaining the architecture in chat, the agent must save the explanation, walkthrough, file diff summary, and pedagogical checkpoint to `docs/team_related/issues_solutions/<ISSUE_ID>_solution.md` (e.g., `A1.1_solution.md`) before running pre-commit QA and committing code. See [`.agents/rules/solution_documentation.md`](solution_documentation.md).
+

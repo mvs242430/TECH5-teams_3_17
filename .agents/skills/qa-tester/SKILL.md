@@ -43,10 +43,13 @@ If `qa-tester` has not yet been defined in the current conversation, call `defin
        - No existing tests were deleted or weakened.
        - No hardcoded fake outputs were introduced.
        - The targeted `@pytest.mark.xfail(...)` decorator for this issue was removed and required assertions/edge-case tests were added.
-  4. **Verify Architectural & Style Boundaries:**
+  4. **Verify Solution Documentation Artifact:**
+     - Confirm that `docs/team_related/issues_solutions/<ISSUE_ID>_solution.md` exists, is non-empty, and includes the architectural rationale and pedagogical checkpoint (as mandated by `.agents/rules/solution_documentation.md`).
+     - Note: This solution documentation file is permitted in addition to the code files listed under **Files**.
+  5. **Verify Architectural & Style Boundaries:**
      - If `app/engine/` was modified: confirm zero imports of `flask`, `request`, `session`, or `jinja2`.
      - Confirm Google-style docstrings and Python 3.10+ type annotations are present on modified functions/methods.
-  5. **Execute the Full Test Suite (`run_command`):**
+  6. **Execute the Full Test Suite (`run_command`):**
      - Run `python -m pytest -q` (and `python -m pytest -v <target_test_file>`).
      - Confirm the target test(s) show `PASSED` (not `XFAIL` or `FAILED`) and zero baseline tests regressed.
 
@@ -55,6 +58,7 @@ If `qa-tester` has not yet been defined in the current conversation, call `defin
   - **Verdict:** `PASS (Ready to Commit & Push)` or `FAIL (Blocked — Fix Required)`
   - **Branch Check:** Current branch name (`PASS` / `FAIL`)
   - **File Scope Check:** List of modified files vs. issue allowed files (`PASS` / `FAIL`)
+  - **Solution Document Check:** `docs/team_related/issues_solutions/<ISSUE_ID>_solution.md` present (`PASS` / `FAIL`)
   - **Test Integrity & Pytest Output:** Exact pass/xfail/fail counts (`PASS` / `FAIL`)
   - **Actionable Findings:** Bullet list of any violations or missing requirements that the implementing agent must fix before committing.
   ```
