@@ -389,29 +389,31 @@ def new_project_form() -> str:
     )
 
 
-@web_bp.post("/projects/new")
-def create_project() -> flask.Response:
-    """Processes creation of a new semester project.
+def _parse_and_validate_project_form(
+    project_id: str,
+    skills: list[models.Skill],
+) -> tuple[
+    models.Project | None,
+    dict[str, Any],
+    dict[str, int],
+    dict[str, bool],
+    str | None,
+]:
+    """Parses and validates project attributes and skill requirements from request.
 
-    Validates project metadata (ID, title, capacities) and constructs
-    the associated skill requirements matrix before persisting via
-    ProjectRepository.
+    Args:
+        project_id: Identifier of the project being created or edited.
+        skills: List of catalogued skills to evaluate against the form.
 
     Returns:
-        Redirect response to the project catalog view upon successful creation,
-        or a re-rendered form response with danger flash messages if validation fails.
+        A tuple of (project, form_data, req_levels, req_mands, error_message).
+        If validation fails, project is None and error_message contains the reason.
     """
-    if not auth.can_edit_cohort_data():
-        flask.flash("Permission denied for current role.", "danger")
-        return flask.redirect(flask.url_for("visualization_web.list_projects"))
-
-    project_id = flask.request.form.get("id", "").strip()
     title = flask.request.form.get("title", "").strip()
     description = flask.request.form.get("description", "").strip()
     min_capacity_raw = flask.request.form.get("min_capacity", "").strip()
     max_capacity_raw = flask.request.form.get("max_capacity", "").strip()
 
-    skills = repositories.SkillRepository().list_all()
     req_levels: dict[str, int] = {}
     req_mands: dict[str, bool] = {}
 
@@ -425,50 +427,54 @@ def create_project() -> flask.Response:
         req_levels[skill.id] = level
         req_mands[skill.id] = is_mand
 
-    def _render_error(message: str) -> flask.Response:
-        flask.flash(message, "danger")
-        return flask.make_response(
-            flask.render_template(
-                "project_form.html",
-                project=None,
-                skills=skills,
-                form_data={
-                    "id": project_id,
-                    "title": title,
-                    "description": description,
-                    "min_capacity": min_capacity_raw,
-                    "max_capacity": max_capacity_raw,
-                },
-                req_levels=req_levels,
-                req_mands=req_mands,
-            )
-        )
-
-    if not project_id:
-        return _render_error("Project ID cannot be empty.")
+    form_data = {
+        "id": project_id,
+        "title": title,
+        "description": description,
+        "min_capacity": min_capacity_raw,
+        "max_capacity": max_capacity_raw,
+    }
 
     if not title:
-        return _render_error("Project title cannot be empty.")
+        return (
+            None,
+            form_data,
+            req_levels,
+            req_mands,
+            "Project title cannot be empty.",
+        )
 
     try:
         min_capacity = int(min_capacity_raw)
         max_capacity = int(max_capacity_raw)
     except (ValueError, TypeError):
-        return _render_error("Capacities must be whole numbers.")
-
-    if min_capacity < 0 or max_capacity < 0:
-        return _render_error("Capacities cannot be negative.")
-
-    if min_capacity > max_capacity:
-        return _render_error(
-            "Minimum capacity cannot exceed maximum capacity."
+        return (
+            None,
+            form_data,
+            req_levels,
+            req_mands,
+            "Capacities must be whole numbers.",
         )
 
-    project_repo = repositories.ProjectRepository()
-    if project_repo.get_by_id(project_id) is not None:
-        return _render_error(f"Project ID '{project_id}' already exists.")
+    if min_capacity < 0 or max_capacity < 0:
+        return (
+            None,
+            form_data,
+            req_levels,
+            req_mands,
+            "Capacities cannot be negative.",
+        )
 
-    requirements: list[models.ProjectRequirement] = [
+    if min_capacity > max_capacity:
+        return (
+            None,
+            form_data,
+            req_levels,
+            req_mands,
+            "Minimum capacity cannot exceed maximum capacity.",
+        )
+
+    requirements = [
         models.ProjectRequirement(
             project_id=project_id,
             skill_id=skill.id,
@@ -487,12 +493,99 @@ def create_project() -> flask.Response:
         max_capacity=max_capacity,
         requirements=requirements,
     )
+    return project, form_data, req_levels, req_mands, None
+
+
+@web_bp.post("/projects/new")
+def create_project() -> flask.Response:
+    """Processes creation of a new semester project.
+
+    Validates project metadata (ID, title, capacities) and constructs
+    the associated skill requirements matrix before persisting via
+    ProjectRepository.
+
+    Returns:
+        Redirect response to the project catalog view upon successful creation,
+        or a re-rendered form response with danger flash messages if validation fails.
+    """
+    if not auth.can_edit_cohort_data():
+        flask.flash("Permission denied for current role.", "danger")
+        return flask.redirect(flask.url_for("visualization_web.list_projects"))
+
+    project_id = flask.request.form.get("id", "").strip()
+    skills = repositories.SkillRepository().list_all()
+
+    if not project_id:
+        flask.flash("Project ID cannot be empty.", "danger")
+        return flask.make_response(
+            flask.render_template(
+                "project_form.html",
+                project=None,
+                skills=skills,
+                form_data={
+                    "id": "",
+                    "title": flask.request.form.get("title", "").strip(),
+                    "description": flask.request.form.get(
+                        "description", ""
+                    ).strip(),
+                    "min_capacity": flask.request.form.get(
+                        "min_capacity", ""
+                    ).strip(),
+                    "max_capacity": flask.request.form.get(
+                        "max_capacity", ""
+                    ).strip(),
+                },
+            )
+        )
+
+    project_repo = repositories.ProjectRepository()
+    if project_repo.get_by_id(project_id) is not None:
+        flask.flash(f"Project ID '{project_id}' already exists.", "danger")
+        _, form_data, req_levels, req_mands, _ = (
+            _parse_and_validate_project_form(project_id, skills)
+        )
+        return flask.make_response(
+            flask.render_template(
+                "project_form.html",
+                project=None,
+                skills=skills,
+                form_data=form_data,
+                req_levels=req_levels,
+                req_mands=req_mands,
+            )
+        )
+
+    project, form_data, req_levels, req_mands, error = (
+        _parse_and_validate_project_form(project_id, skills)
+    )
+    if error or project is None:
+        flask.flash(error or "Validation failed.", "danger")
+        return flask.make_response(
+            flask.render_template(
+                "project_form.html",
+                project=None,
+                skills=skills,
+                form_data=form_data,
+                req_levels=req_levels,
+                req_mands=req_mands,
+            )
+        )
 
     try:
         project_repo.save(project)
     except sqlite3.IntegrityError as exc:
-        return _render_error(
-            f"Database constraint error while saving project: {exc}"
+        flask.flash(
+            f"Database constraint error while saving project: {exc}", "danger"
+        )
+        return flask.make_response(
+            flask.render_template(
+                "project_form.html",
+                project=None,
+                skills=skills,
+                form_data=form_data,
+                req_levels=req_levels,
+                req_mands=req_mands,
+            )
         )
 
     flask.flash(f"Project '{project_id}' created.", "success")
@@ -508,33 +601,102 @@ def edit_project_form(project_id: str) -> Any:
         return flask.redirect(flask.url_for("visualization_web.list_projects"))
 
     skills = repositories.SkillRepository().list_all()
+    req_levels = {r.skill_id: r.minimum_level for r in project.requirements}
+    req_mands = {r.skill_id: r.is_mandatory for r in project.requirements}
     return flask.render_template(
-        "project_form.html", project=project, skills=skills
+        "project_form.html",
+        project=project,
+        skills=skills,
+        req_levels=req_levels,
+        req_mands=req_mands,
     )
 
 
 @web_bp.post("/projects/<project_id>/edit")
 def update_project(project_id: str) -> flask.Response:
-    """Updates an existing project entity.
+    """Updates an existing project entity."""
+    if not auth.can_edit_cohort_data():
+        flask.flash("Permission denied for current role.", "danger")
+        return flask.redirect(flask.url_for("visualization_web.list_projects"))
 
-    Raises:
-        NotImplementedError: To be implemented by Team A.
-    """
-    raise NotImplementedError(
-        "TODO (Team A): Implement project update and requirement parsing"
+    project_repo = repositories.ProjectRepository()
+    existing_project = project_repo.get_by_id(project_id)
+    if not existing_project:
+        flask.flash(f"Project '{project_id}' not found.", "danger")
+        return flask.redirect(flask.url_for("visualization_web.list_projects"))
+
+    skills = repositories.SkillRepository().list_all()
+    project, form_data, req_levels, req_mands, error = (
+        _parse_and_validate_project_form(project_id, skills)
     )
+    if error or project is None:
+        flask.flash(error or "Validation failed.", "danger")
+        return flask.make_response(
+            flask.render_template(
+                "project_form.html",
+                project=existing_project,
+                skills=skills,
+                form_data=form_data,
+                req_levels=req_levels,
+                req_mands=req_mands,
+            )
+        )
+
+    try:
+        project_repo.save(project)
+    except sqlite3.IntegrityError as exc:
+        flask.flash(
+            f"Database constraint error while updating project: {exc}", "danger"
+        )
+        return flask.make_response(
+            flask.render_template(
+                "project_form.html",
+                project=existing_project,
+                skills=skills,
+                form_data=form_data,
+                req_levels=req_levels,
+                req_mands=req_mands,
+            )
+        )
+
+    flask.flash(f"Project '{project_id}' updated.", "success")
+    return flask.redirect(flask.url_for("visualization_web.list_projects"))
 
 
 @web_bp.post("/projects/<project_id>/delete")
 def delete_project(project_id: str) -> flask.Response:
-    """Deletes a project.
+    """Deletes a project from the catalog, cascading to preferences."""
+    if not auth.can_edit_cohort_data():
+        flask.flash("Permission denied for current role.", "danger")
+        return flask.redirect(flask.url_for("visualization_web.list_projects"))
 
-    Raises:
-        NotImplementedError: To be implemented by Team A.
-    """
-    raise NotImplementedError(
-        "TODO (Team A): Implement project deletion"
-    )
+    project_repo = repositories.ProjectRepository()
+    existing = project_repo.get_by_id(project_id)
+    if not existing:
+        flask.flash(f"Project '{project_id}' not found.", "warning")
+        return flask.redirect(flask.url_for("visualization_web.list_projects"))
+
+    try:
+        # Count student preferences referencing this project before cascade delete
+        pref_rows = project_repo.db.execute_query(
+            "SELECT COUNT(*) AS cnt FROM preferences WHERE project_id = ?;",
+            (project_id,),
+        )
+        pref_count = pref_rows[0]["cnt"] if pref_rows else 0
+
+        project_repo.delete(project_id)
+        if pref_count > 0:
+            msg = (
+                f"Project '{project_id}' deleted "
+                f"({pref_count} student preferences removed)."
+            )
+        else:
+            msg = f"Project '{project_id}' deleted."
+        flask.flash(msg, "info")
+    except Exception as exc:
+        flask.flash(f"Error deleting project '{project_id}': {exc}", "danger")
+
+    return flask.redirect(flask.url_for("visualization_web.list_projects"))
 
 
 # -----------------------------------------------------------------------------

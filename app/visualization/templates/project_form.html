@@ -10,13 +10,6 @@
   </div>
 
   <div class="card-body">
-    <!-- TODO (Team A): Implement Project Creation/Edit Form -->
-    <div class="alert alert-info" style="margin-bottom: 1.5rem;">
-      <strong>Team A Starter Carcass:</strong>
-      Implement the form fields below to capture project attributes (ID, title, description, min/max capacities)
-      and the project skill requirements matrix (proficiency levels 1–5 and mandatory constraint flags).
-    </div>
-
     <form action="{% if project %}{{ url_for('visualization_web.update_project', project_id=project.id) }}{% else %}{{ url_for('visualization_web.create_project') }}{% endif %}" method="POST">
       <div class="grid-2">
         <div class="form-group">
@@ -67,15 +60,33 @@
             </thead>
             <tbody>
               {% for sk in skills %}
-                {% set cur_lvl = req_levels[sk.id] if req_levels and sk.id in req_levels else 0 %}
-                {% set cur_mand = req_mands[sk.id] if req_mands and sk.id in req_mands else false %}
+                {% set ns = namespace(lvl=0, mand=false) %}
+                {% if req_levels is defined and req_levels and sk.id in req_levels %}
+                  {% set ns.lvl = req_levels[sk.id] %}
+                {% elif project and project.requirements %}
+                  {% for r in project.requirements %}
+                    {% if r.skill_id == sk.id %}
+                      {% set ns.lvl = r.minimum_level %}
+                      {% set ns.mand = r.is_mandatory %}
+                    {% endif %}
+                  {% endfor %}
+                {% endif %}
+                {% if req_mands is defined and req_mands and sk.id in req_mands %}
+                  {% set ns.mand = req_mands[sk.id] %}
+                {% elif not req_levels and project and project.requirements %}
+                  {% for r in project.requirements %}
+                    {% if r.skill_id == sk.id %}
+                      {% set ns.mand = r.is_mandatory %}
+                    {% endif %}
+                  {% endfor %}
+                {% endif %}
                 <tr>
                   <td><strong>{{ sk.name }}</strong> (<code>{{ sk.id }}</code>)</td>
                   <td style="width: 150px;">
-                    <input type="number" name="req_level_{{ sk.id }}" min="0" max="5" class="form-control" value="{{ cur_lvl }}">
+                    <input type="number" name="req_level_{{ sk.id }}" min="0" max="5" class="form-control" value="{{ ns.lvl }}">
                   </td>
                   <td style="text-align: center; width: 150px;">
-                    <input type="checkbox" name="req_mand_{{ sk.id }}" value="1" {% if cur_mand %}checked{% endif %}>
+                    <input type="checkbox" name="req_mand_{{ sk.id }}" value="1" {% if ns.mand %}checked{% endif %}>
                   </td>
                 </tr>
               {% endfor %}

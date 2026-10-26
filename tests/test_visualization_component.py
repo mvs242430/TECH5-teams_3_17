@@ -356,6 +356,100 @@ def test_projects_crud_workflow(tmp_path: pathlib.Path) -> None:
     )
     assert repositories.ProjectRepository().get_by_id("P2") is None
 
+    # 5. Edit page shows the saved level
+    res_get_edit = client.get("/projects/P1/edit")
+    assert res_get_edit.status_code == 200
+    assert b"FinTech Risk" in res_get_edit.data
+    assert b'name="req_level_py"' in res_get_edit.data
+    assert b'value="3"' in res_get_edit.data
+
+    # 6. Admin edits the project (changes title, requirement level, unticks mandatory)
+    res_edit = client.post(
+        "/projects/P1/edit",
+        data={
+            "title": "FinTech Advanced Analytics",
+            "description": "Updated risk analytics scope",
+            "min_capacity": 2,
+            "max_capacity": 4,
+            "req_level_py": 4,
+            # req_mand_py unticked / omitted
+        },
+        follow_redirects=True,
+    )
+    assert res_edit.status_code == 200
+    assert (
+        b"Project 'P1' updated." in res_edit.data
+        or b"Project &#39;P1&#39; updated." in res_edit.data
+    )
+
+    updated = repositories.ProjectRepository().get_by_id("P1")
+    assert updated is not None
+    assert updated.title == "FinTech Advanced Analytics"
+    assert updated.min_capacity == 2
+    assert updated.max_capacity == 4
+    assert len(updated.requirements) == 1
+    req_updated = updated.requirements[0]
+    assert req_updated.skill_id == "py"
+    assert req_updated.minimum_level == 4
+    assert req_updated.is_mandatory is False
+
+    # 7. Seed student preference on P1 and verify delete cascades
+    repositories.StudentRepository().save(
+        models.Student(
+            id="S1",
+            display_name="Student One",
+            preferences=[
+                models.Preference(student_id="S1", project_id="P1", rank=1)
+            ],
+        )
+    )
+
+    res_del = client.post("/projects/P1/delete", follow_redirects=True)
+    assert res_del.status_code == 200
+    assert (
+        b"Project 'P1' deleted" in res_del.data
+        or b"Project &#39;P1&#39; deleted" in res_del.data
+    )
+    assert (
+        b"1 student preferences removed" in res_del.data
+        or b"student preferences removed" in res_del.data
+    )
+    assert repositories.ProjectRepository().get_by_id("P1") is None
+
+    # 8. Student Viewer gets "Permission denied" on create, edit, and delete
+    client.post("/set-role", data={"role": "STUDENT"}, follow_redirects=True)
+
+    # Student Viewer denied on create
+    res_student_create = client.post(
+        "/projects/new",
+        data={
+            "id": "P_DENIED",
+            "title": "Unauthorized Project",
+            "min_capacity": 1,
+            "max_capacity": 2,
+        },
+        follow_redirects=True,
+    )
+    assert res_student_create.status_code == 200
+    assert b"Permission denied" in res_student_create.data
+    assert repositories.ProjectRepository().get_by_id("P_DENIED") is None
+
+    # Student Viewer denied on edit
+    res_student_edit = client.post(
+        "/projects/P1/edit",
+        data={"title": "Unauthorized Edit"},
+        follow_redirects=True,
+    )
+    assert res_student_edit.status_code == 200
+    assert b"Permission denied" in res_student_edit.data
+
+    # Student Viewer denied on delete
+    res_student_delete = client.post(
+        "/projects/P1/delete", follow_redirects=True
+    )
+    assert res_student_delete.status_code == 200
+    assert b"Permission denied" in res_student_delete.data
+
 
 @pytest.mark.xfail(
     raises=NotImplementedError,
