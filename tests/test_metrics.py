@@ -13,7 +13,10 @@ def test_gini_calculation() -> None:
     # Inequality
     gini = metrics.calculate_gini([1.0, 1.0, 1.0, 10.0])
     assert 0.0 < gini < 1.0
-    # Edge cases required by Issue B1.1: empty list, single value, all zeros, negative
+
+
+def test_gini_edge_cases() -> None:
+    """Verifies Gini edge cases: empty list, single value, zeros, negative."""
     assert metrics.calculate_gini([]) == 0.0
     assert metrics.calculate_gini([5.0]) == 0.0
     assert metrics.calculate_gini([0.0, 0.0, 0.0]) == 0.0
@@ -44,15 +47,33 @@ def test_skill_fit_calculation() -> None:
     assert fit == 0.75
     assert unmet == ["sql"]
 
-    # Edge cases required by Issue B1.1: zero-skill student and project without requirements
-    zero_skill_student = models.Student(id="S_ZERO", display_name="Zero", skills={})
+
+def test_skill_fit_edge_cases() -> None:
+    """Verifies skill fit edge cases: zero-skill student and no-requirement project."""
+    project = models.Project(
+        id="P1",
+        title="P1",
+        requirements=[
+            models.ProjectRequirement(
+                project_id="P1", skill_id="py", minimum_level=3
+            ),
+            models.ProjectRequirement(
+                project_id="P1", skill_id="sql", minimum_level=2
+            ),
+        ],
+    )
+    zero_skill_student = models.Student(
+        id="S_ZERO", display_name="Zero", skills={}
+    )
     fit_zero, unmet_zero = metrics.calculate_assignment_skill_fit(
         zero_skill_student, project
     )
     assert fit_zero == 0.0
     assert unmet_zero == ["py", "sql"]
 
-    no_req_project = models.Project(id="P_NONE", title="No Reqs", requirements=[])
+    no_req_project = models.Project(
+        id="P_NONE", title="No Reqs", requirements=[]
+    )
     fit_no_req, unmet_no_req = metrics.calculate_assignment_skill_fit(
         zero_skill_student, no_req_project
     )

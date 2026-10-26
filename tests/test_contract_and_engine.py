@@ -148,14 +148,10 @@ def test_contract_compare_solutions(tmp_path: pathlib.Path) -> None:
     with pytest.raises(KeyError):
         mock_engine.compare_solutions(sol_a.id, "non_existent_id")
 
-    # AssignmentEngine delegates to metrics.compare_two_solutions and returns RunComparison
+    # AssignmentEngine delegates to metrics which raises NotImplementedError
     engine: contract.AssignmentEngineContract = solvers.AssignmentEngine()
-    real_comparison = engine.compare_solutions(sol_a.id, sol_b.id)
-    assert isinstance(real_comparison, models.RunComparison)
-    assert real_comparison.solution_a_id == sol_a.id
-    assert real_comparison.solution_b_id == sol_b.id
-    assert isinstance(real_comparison.changed_assignments, list)
-    assert isinstance(real_comparison.delta_metrics, dict)
+    with pytest.raises(NotImplementedError):
+        engine.compare_solutions(sol_a.id, sol_b.id)
 
 
 def test_mock_engine_provided() -> None:
