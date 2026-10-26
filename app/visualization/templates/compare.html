@@ -43,15 +43,8 @@
       </button>
     </form>
 
-    <!-- TODO (Team A): Implement Side-by-Side Solution Comparison -->
-    <div class="alert alert-info" style="margin-bottom: 1.5rem;">
-      <strong>Team A Starter Carcass:</strong>
-      Implement the comparative analysis view below using the <code>RunComparison</code> DTO.
-      Display comparative delta metrics (skill fit, preference rank, Gini), trade-off findings,
-      and the table of changed student allocations between Solution A and Solution B.
-    </div>
-
     {% if comparison and sol_a and sol_b %}
+      {% set gini_delta = comparison.delta_metrics.get('gini_delta', 0.0) %}
       <!-- Comparative KPI Deltas -->
       <div class="kpi-grid">
         <div class="kpi-card">
@@ -83,6 +76,14 @@
         </div>
 
         <div class="kpi-card">
+          <span class="kpi-label">&Delta; Gini (Fairness)</span>
+          <span class="kpi-value {% if gini_delta < 0 %}text-success{% elif gini_delta > 0 %}text-danger{% endif %}">
+            {% if gini_delta > 0 %}+{% endif %}{{ gini_delta|round(4) }}
+          </span>
+          <span class="kpi-sub">Lower Gini indicates fairer distribution</span>
+        </div>
+
+        <div class="kpi-card">
           <span class="kpi-label">Rank Shifts in Cohort</span>
           <span class="kpi-value">
             <span style="color: var(--success);">{{ comparison.rank_improved_count }} &uarr;</span>
@@ -90,6 +91,49 @@
             <span style="color: var(--danger);">{{ comparison.rank_worsened_count }} &darr;</span>
           </span>
           <span class="kpi-sub">{{ comparison.rank_improved_count }} improved, {{ comparison.rank_worsened_count }} worsened</span>
+        </div>
+      </div>
+
+      <!-- Plain-Language Summary Box: Improves / Gets worse / Who is affected -->
+      <div class="card" style="margin-bottom: 1.5rem; border-left: 4px solid var(--primary);">
+        <div class="card-body">
+          <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 0.75rem;">Plain-Language Impact Summary</h3>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
+            <div>
+              <strong style="color: var(--success);">&#9650; Improves:</strong>
+              <p style="font-size: 0.9rem; margin-top: 0.25rem; color: var(--text-muted);">
+                {% if comparison.rank_improved_count > 0 or comparison.delta_mean_skill_fit > 0 or gini_delta < 0 %}
+                  {% if comparison.rank_improved_count > 0 %}{{ comparison.rank_improved_count }} student(s) receive a more preferred project. {% endif %}
+                  {% if comparison.delta_mean_skill_fit > 0 %}Average skill fit increases by +{{ (comparison.delta_mean_skill_fit * 100)|round(1) }}%. {% endif %}
+                  {% if gini_delta < 0 %}Fairness improves (Gini drops by {{ gini_delta|round(4) }}).{% endif %}
+                {% else %}
+                  No aggregate metric improves in Solution B compared with Solution A.
+                {% endif %}
+              </p>
+            </div>
+            <div>
+              <strong style="color: var(--danger);">&#9660; Gets worse:</strong>
+              <p style="font-size: 0.9rem; margin-top: 0.25rem; color: var(--text-muted);">
+                {% if comparison.rank_worsened_count > 0 or comparison.delta_mean_skill_fit < 0 or gini_delta > 0 %}
+                  {% if comparison.rank_worsened_count > 0 %}{{ comparison.rank_worsened_count }} student(s) move to a less preferred project. {% endif %}
+                  {% if comparison.delta_mean_skill_fit < 0 %}Average skill fit decreases by {{ (comparison.delta_mean_skill_fit * 100)|round(1) }}%. {% endif %}
+                  {% if gini_delta > 0 %}Inequality increases (Gini rises by +{{ gini_delta|round(4) }}).{% endif %}
+                {% else %}
+                  No aggregate metric worsens in Solution B compared with Solution A.
+                {% endif %}
+              </p>
+            </div>
+            <div>
+              <strong style="color: var(--primary);">&#128101; Who is affected:</strong>
+              <p style="font-size: 0.9rem; margin-top: 0.25rem; color: var(--text-muted);">
+                {% if comparison.changed_students_count > 0 %}
+                  {{ comparison.changed_students_count }} of {{ comparison.total_students }} student(s) change project assignments ({{ comparison.rank_improved_count }} improved, {{ comparison.rank_worsened_count }} worsened).
+                {% else %}
+                  0 students affected &mdash; both solutions assign every student to the same project.
+                {% endif %}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 

@@ -1461,6 +1461,26 @@ def compare_solutions() -> Any:
             sol1_id, sol2_id
         )
 
+    # Enrich changed_assignments with human-readable student names and project
+    # titles from the repositories so the Compare table displays full names.
+    student_map = {
+        s.id: s.display_name
+        for s in repositories.StudentRepository().list_all()
+    }
+    project_map = {
+        p.id: p.title for p in repositories.ProjectRepository().list_all()
+    }
+    for item in comparison.changed_assignments:
+        s_id = item.get("student_id", "")
+        p_a_id = item.get("project_a_id") or item.get("project_a", "")
+        p_b_id = item.get("project_b_id") or item.get("project_b", "")
+        if s_id in student_map:
+            item["student_name"] = student_map[s_id]
+        if p_a_id in project_map:
+            item["project_a_title"] = project_map[p_a_id]
+        if p_b_id in project_map:
+            item["project_b_title"] = project_map[p_b_id]
+
     return flask.render_template(
         "compare.html",
         sol_a=sol_a,
