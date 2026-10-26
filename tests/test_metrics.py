@@ -13,6 +13,12 @@ def test_gini_calculation() -> None:
     # Inequality
     gini = metrics.calculate_gini([1.0, 1.0, 1.0, 10.0])
     assert 0.0 < gini < 1.0
+    # Edge cases required by Issue B1.1: empty list, single value, all zeros, negative
+    assert metrics.calculate_gini([]) == 0.0
+    assert metrics.calculate_gini([5.0]) == 0.0
+    assert metrics.calculate_gini([0.0, 0.0, 0.0]) == 0.0
+    with pytest.raises(ValueError, match="non-negative"):
+        metrics.calculate_gini([1.0, -2.0, 3.0])
 
 
 def test_skill_fit_calculation() -> None:
@@ -37,6 +43,21 @@ def test_skill_fit_calculation() -> None:
     # py is 100% satisfied, sql is 1/2 = 50% satisfied. Average = 75%
     assert fit == 0.75
     assert unmet == ["sql"]
+
+    # Edge cases required by Issue B1.1: zero-skill student and project without requirements
+    zero_skill_student = models.Student(id="S_ZERO", display_name="Zero", skills={})
+    fit_zero, unmet_zero = metrics.calculate_assignment_skill_fit(
+        zero_skill_student, project
+    )
+    assert fit_zero == 0.0
+    assert unmet_zero == ["py", "sql"]
+
+    no_req_project = models.Project(id="P_NONE", title="No Reqs", requirements=[])
+    fit_no_req, unmet_no_req = metrics.calculate_assignment_skill_fit(
+        zero_skill_student, no_req_project
+    )
+    assert fit_no_req == 1.0
+    assert unmet_no_req == []
 
 
 def test_solution_indicators_calculation() -> None:
