@@ -462,3 +462,191 @@ def test_compare_solutions_view(tmp_path: pathlib.Path) -> None:
     client = app.test_client()
 
     client.get("/compare?sol1=S1&sol2=S2")
+
+
+# -----------------------------------------------------------------------------
+# Issue A1.3 - Friendly messages for bad data (one test per case)
+# -----------------------------------------------------------------------------
+
+
+@pytest.fixture
+def seeded_client(tmp_path: pathlib.Path):
+    """Admin test client with one skill and three projects in the catalog."""
+    db_file = tmp_path / "test_bad_data.db"
+    app = create_app({"TESTING": True, "DATABASE_PATH": db_file})
+    client = app.test_client()
+    client.post("/set-role", data={"role": "ADMIN"}, follow_redirects=True)
+
+    repositories.SkillRepository().save(
+        models.Skill(id="py", name="Python", description="Python Programming")
+    )
+    for p_id in ("P1", "P2", "P3"):
+        repositories.ProjectRepository().save(
+            models.Project(
+                id=p_id, title=f"Project {p_id}", min_capacity=1, max_capacity=3
+            )
+        )
+    return client
+
+
+def _post_project(client, **overrides):
+    """Posts the new-project form with valid defaults plus overrides."""
+    data = {
+        "id": "PX",
+        "title": "New Project",
+        "description": "",
+        "min_capacity": "1",
+        "max_capacity": "3",
+        "req_level_py": "0",
+    }
+    data.update(overrides)
+    return client.post("/projects/new", data=data, follow_redirects=True)
+
+
+def _post_student(client, **overrides):
+    """Posts the new-student form with valid defaults plus overrides."""
+    data = {
+        "id": "SX",
+        "display_name": "New Student",
+        "skill_py": "2",
+        "preferences_text": "P1, P2, P3",
+    }
+    data.update(overrides)
+    return client.post("/students/new", data=data, follow_redirects=True)
+
+
+def test_project_min_capacity_above_max_shows_message(seeded_client) -> None:
+    """Min seats bigger than max seats is refused with a clear message."""
+    res = _post_project(seeded_client, min_capacity="5", max_capacity="2")
+    assert res.status_code == 200
+    assert b"Minimum capacity cannot exceed maximum capacity" in res.data
+    assert repositories.ProjectRepository().get_by_id("PX") is None
+
+
+@pytest.mark.parametrize(
+    ("min_cap", "max_cap", "expected"),
+    [
+        ("-1", "3", b"Capacities cannot be negative"),
+        ("", "3", b"Minimum and maximum capacity are both required"),
+        ("1", "", b"Minimum and maximum capacity are both required"),
+        ("one", "3", b"Capacities must be whole numbers"),
+        ("0", "0", b"Maximum capacity must be at least 1 seat"),
+    ],
+)
+def test_project_negative_or_empty_capacity_shows_message(
+    seeded_client, min_cap: str, max_cap: str, expected: bytes
+) -> None:
+    """Negative, empty or non-numeric capacity is refused, never crashes."""
+    res = _post_project(seeded_client, min_capacity=min_cap, max_capacity=max_cap)
+    assert res.status_code == 200
+    assert expected in res.data
+    assert repositories.ProjectRepository().get_by_id("PX") is None
+
+
+def test_project_unknown_skill_shows_message(seeded_client) -> None:
+    """A requirement for a skill that is not in the catalog is refused."""
+    res = _post_project(seeded_client, req_level_rust="3")
+    assert res.status_code == 200
+    assert b"does not exist" in res.data
+    assert repositories.ProjectRepository().get_by_id("PX") is None
+
+
+@pytest.mark.parametrize("level", ["6", "-1", "abc"])
+def test_project_skill_level_outside_range_shows_message(
+    seeded_client, level: str
+) -> None:
+    """A required skill level outside 0-5 is refused instead of dropped."""
+    res = _post_project(seeded_client, req_level_py=level)
+    assert res.status_code == 200
+    assert b"Required level for skill" in res.data
+    assert repositories.ProjectRepository().get_by_id("PX") is None
+
+
+def test_duplicate_project_id_shows_message(seeded_client) -> None:
+    """Creating a project with an existing id does not overwrite it."""
+    res = _post_project(seeded_client, id="P1", title="Overwritten")
+    assert res.status_code == 200
+    assert b"already exists" in res.data
+    assert repositories.ProjectRepository().get_by_id("P1").title == "Project P1"
+
+
+def test_student_unknown_skill_shows_message(seeded_client) -> None:
+    """A skill level for a skill that is not in the catalog is refused."""
+    res = _post_student(seeded_client, skill_rust="3")
+    assert res.status_code == 200
+    assert b"does not exist" in res.data
+    assert repositories.StudentRepository().get_by_id("SX") is None
+
+
+@pytest.mark.parametrize("level", ["7", "-2", "abc"])
+def test_student_skill_level_outside_range_shows_message(
+    seeded_client, level: str
+) -> None:
+    """A student skill level outside 0-5 is refused, never saved."""
+    res = _post_student(seeded_client, skill_py=level)
+    assert res.status_code == 200
+    assert b"Level for skill" in res.data
+    assert repositories.StudentRepository().get_by_id("SX") is None
+
+
+def test_duplicate_student_id_shows_message(seeded_client) -> None:
+    """Creating a student with an existing id does not overwrite it."""
+    first = _post_student(seeded_client, id="S1", display_name="Alice")
+    assert b"created successfully" in first.data
+
+    res = _post_student(seeded_client, id="S1", display_name="Bob")
+    assert res.status_code == 200
+    assert b"already exists" in res.data
+    assert repositories.StudentRepository().get_by_id("S1").display_name == (
+        "Alice"
+    )
+
+
+def test_student_preference_for_unknown_project_shows_message(
+    seeded_client,
+) -> None:
+    """A preference for a project that does not exist is refused."""
+    res = _post_student(seeded_client, preferences_text="P1, P99, P2")
+    assert res.status_code == 200
+    assert b"Invalid project ID(s) in preferences: P99" in res.data
+    assert repositories.StudentRepository().get_by_id("SX") is None
+
+
+def test_student_same_project_ranked_twice_shows_message(seeded_client) -> None:
+    """Listing a project twice (two ranks for one project) is refused."""
+    res = _post_student(seeded_client, preferences_text="P1, P2, p1")
+    assert res.status_code == 200
+    assert b"listed more than once in preferences: P1" in res.data
+    assert repositories.StudentRepository().get_by_id("SX") is None
+
+
+def test_student_fewer_than_three_preferences_warns_but_saves(
+    seeded_client,
+) -> None:
+    """Fewer than 3 preferences gives a warning, but the student is saved."""
+    res = _post_student(seeded_client, preferences_text="P1")
+    assert res.status_code == 200
+    assert b"at least 3 are recommended" in res.data
+    assert b"created successfully" in res.data
+    saved = repositories.StudentRepository().get_by_id("SX")
+    assert saved is not None
+    assert [p.project_id for p in saved.preferences] == ["P1"]
+
+
+def test_student_update_with_bad_data_keeps_old_values(seeded_client) -> None:
+    """Editing a student with a bad skill level keeps the saved data."""
+    _post_student(seeded_client, id="S2", display_name="Carla")
+    res = seeded_client.post(
+        "/students/S2/edit",
+        data={
+            "display_name": "Carla",
+            "skill_py": "9",
+            "preferences_text": "P3, P2, P1",
+        },
+        follow_redirects=True,
+    )
+    assert res.status_code == 200
+    assert b"Level for skill" in res.data
+    saved = repositories.StudentRepository().get_by_id("S2")
+    assert saved.get_skill_level("py") == 2
+    assert [p.project_id for p in saved.preferences] == ["P1", "P2", "P3"]

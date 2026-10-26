@@ -179,6 +179,143 @@ def _parse_and_validate_preferences(
     return valid_prefs, invalid_ids
 
 
+def _parse_student_skills(
+    valid_skill_ids: set[str],
+) -> tuple[dict[str, int], list[str]]:
+    """Reads ``skill_<id>`` fields from the form and validates them.
+
+    A level of 0 (or an empty field) means the student does not have the
+    skill. Levels must be whole numbers from 0 to 5, and only skills from
+    the catalog are accepted.
+
+    Args:
+        valid_skill_ids: Identifiers of all skills in the catalog.
+
+    Returns:
+        A tuple of (skills_dict, error_messages). ``skills_dict`` maps
+        skill id to level for every level above 0.
+    """
+    skills_dict: dict[str, int] = {}
+    errors: list[str] = []
+    for key, val in flask.request.form.items():
+        if not key.startswith("skill_"):
+            continue
+        skill_id = key.removeprefix("skill_")
+        raw = val.strip()
+        if not raw:
+            continue
+        if skill_id not in valid_skill_ids:
+            if raw != "0":
+                errors.append(
+                    f"Skill '{skill_id}' does not exist. Add it on the "
+                    "Skills page first."
+                )
+            continue
+        try:
+            lvl = int(raw)
+        except ValueError:
+            errors.append(
+                f"Level for skill '{skill_id}' must be a whole number "
+                "between 0 and 5."
+            )
+            continue
+        if not 0 <= lvl <= 5:
+            errors.append(
+                f"Level for skill '{skill_id}' is {lvl}; it must be "
+                "between 0 (none) and 5."
+            )
+        elif lvl > 0:
+            skills_dict[skill_id] = lvl
+    return skills_dict, errors
+
+
+def _find_repeated_preferences(
+    pref_raw: str,
+    available_projects: dict[str, models.Project],
+) -> list[str]:
+    """Finds projects that appear more than once in the preference list.
+
+    Preferences are ranked by position, so listing a project twice would
+    give it two ranks. Matching is case-insensitive, like the parser.
+
+    Args:
+        pref_raw: Comma-separated project IDs string from user input.
+        available_projects: Map of valid project ID to Project model.
+
+    Returns:
+        Project IDs (catalog spelling) that are listed more than once.
+    """
+    case_map = {p_id.upper(): p_id for p_id in available_projects}
+    seen: set[str] = set()
+    repeated: list[str] = []
+    for token in (p.strip() for p in pref_raw.split(",")):
+        project_id = case_map.get(token.upper())
+        if project_id is None:
+            continue
+        if project_id in seen and project_id not in repeated:
+            repeated.append(project_id)
+        seen.add(project_id)
+    return repeated
+
+
+def _validate_student_skills_and_preferences(
+    student_id: str,
+) -> tuple[dict[str, int], list[models.Preference], list[str], list[str]]:
+    """Parses and validates skills and preferences of the student form.
+
+    Shared by ``create_student`` and ``update_student`` so both apply the
+    same rules (Issue A1.3).
+
+    Args:
+        student_id: Identifier of the student being created or edited.
+
+    Returns:
+        A tuple of (skills_dict, preferences, errors, warnings). Errors
+        block saving; warnings are shown but the student is still saved.
+    """
+    valid_skill_ids = {s.id for s in repositories.SkillRepository().list_all()}
+    skills_dict, errors = _parse_student_skills(valid_skill_ids)
+
+    available_projects = {
+        p.id: p for p in repositories.ProjectRepository().list_all()
+    }
+    pref_raw = flask.request.form.get("preferences_text", "")
+    preferences, invalid_proj_ids = _parse_and_validate_preferences(
+        student_id, pref_raw, available_projects
+    )
+
+    if invalid_proj_ids:
+        valid_list = (
+            ", ".join(sorted(available_projects.keys())) or "None available"
+        )
+        errors.append(
+            f"Invalid project ID(s) in preferences: "
+            f"{', '.join(invalid_proj_ids)}. "
+            f"Available projects: {valid_list}."
+        )
+
+    repeated = _find_repeated_preferences(pref_raw, available_projects)
+    if repeated:
+        errors.append(
+            f"Project(s) listed more than once in preferences: "
+            f"{', '.join(repeated)}. Each project can have only one rank."
+        )
+
+    # Fewer than 3 choices is allowed, but the optimiser has less room to
+    # find a good match, so we only warn. If the catalog has fewer than 3
+    # projects, the student cannot list more than the catalog holds.
+    recommended = min(3, len(available_projects))
+    warnings: list[str] = []
+    if not errors and len(preferences) < recommended:
+        warnings.append(
+            f"Only {len(preferences)} project preference(s) given; at "
+            f"least {recommended} are recommended so the optimiser has "
+            "alternatives."
+        )
+
+    return skills_dict, preferences, errors, warnings
+
+
 @web_bp.post("/students/new")
 def create_student() -> flask.Response:
     """Processes creation of a new student."""
@@ -193,54 +330,32 @@ def create_student() -> flask.Response:
         s.id: s.display_name for s in repositories.StudentRepository().list_all()
     }
 
-    if not _check_valid_student_data(s_id,name, available_students):
-        flask.flash(f"Student ID: {s_id}, or Name: {name} already exists.", "danger")
-        return flask.redirect(
-            flask.url_for("visualization_web.new_student_form")
-        )
-
+    # Empty id is checked first: a duplicate check on "" is meaningless.
     if not s_id:
-        flask.flash("Student ID cannot be empty.", "warning")
+        flask.flash("Student ID cannot be empty.", "danger")
         return flask.redirect(
             flask.url_for("visualization_web.new_student_form")
         )
 
-    # Parse skills
-    skills_dict: dict[str, int] = {}
-    valid_skills = {s.id for s in repositories.SkillRepository().list_all()}
-    for key, val in flask.request.form.items():
-        if key.startswith("skill_") and val:
-            skill_id = key.replace("skill_", "")
-            if skill_id in valid_skills:
-                try:
-                    lvl = int(val)
-                    if lvl > 0:
-                        skills_dict[skill_id] = lvl
-                except ValueError:
-                    pass
-
-    # Parse and validate preferences against catalog
-    available_projects = {
-        p.id: p for p in repositories.ProjectRepository().list_all()
-    }
-    pref_raw = flask.request.form.get("preferences_text", "")
-    preferences, invalid_proj_ids = _parse_and_validate_preferences(
-        s_id, pref_raw, available_projects
-    )
-
-    if invalid_proj_ids:
-        valid_list = (
-            ", ".join(sorted(available_projects.keys())) or "None available"
-        )
+    if not _check_valid_student_data(s_id, name, available_students):
         flask.flash(
-            f"Invalid project ID(s) in preferences: "
-            f"{', '.join(invalid_proj_ids)}. "
-            f"Available projects: {valid_list}.",
-            "danger",
+            f"Student ID '{s_id}' or name '{name}' already exists.", "danger"
         )
         return flask.redirect(
             flask.url_for("visualization_web.new_student_form")
         )
+
+    skills_dict, preferences, errors, warnings = (
+        _validate_student_skills_and_preferences(s_id)
+    )
+    if errors:
+        for message in errors:
+            flask.flash(message, "danger")
+        return flask.redirect(
+            flask.url_for("visualization_web.new_student_form")
+        )
+    for message in warnings:
+        flask.flash(f"Warning: {message}", "warning")
 
     student = models.Student(
         id=s_id,
@@ -292,43 +407,23 @@ def update_student(student_id: str) -> flask.Response:
         flask.request.form.get("display_name", "").strip() or student_id
     )
 
-    valid_skills = {s.id for s in repositories.SkillRepository().list_all()}
-    skills_dict: dict[str, int] = {}
-    for key, val in flask.request.form.items():
-        if key.startswith("skill_") and val:
-            skill_id = key.replace("skill_", "")
-            if skill_id in valid_skills:
-                try:
-                    lvl = int(val)
-                    if lvl > 0:
-                        skills_dict[skill_id] = lvl
-                except ValueError:
-                    pass
+    if repositories.StudentRepository().get_by_id(student_id) is None:
+        flask.flash(f"Student '{student_id}' not found.", "danger")
+        return flask.redirect(flask.url_for("visualization_web.list_students"))
 
-    # Parse and validate preferences against catalog
-    available_projects = {
-        p.id: p for p in repositories.ProjectRepository().list_all()
-    }
-    pref_raw = flask.request.form.get("preferences_text", "")
-    preferences, invalid_proj_ids = _parse_and_validate_preferences(
-        student_id, pref_raw, available_projects
+    skills_dict, preferences, errors, warnings = (
+        _validate_student_skills_and_preferences(student_id)
     )
-
-    if invalid_proj_ids:
-        valid_list = (
-            ", ".join(sorted(available_projects.keys())) or "None available"
-        )
-        flask.flash(
-            f"Invalid project ID(s) in preferences: "
-            f"{', '.join(invalid_proj_ids)}. "
-            f"Available projects: {valid_list}.",
-            "danger",
-        )
+    if errors:
+        for message in errors:
+            flask.flash(message, "danger")
         return flask.redirect(
             flask.url_for(
                 "visualization_web.edit_student_form", student_id=student_id
             )
         )
+    for message in warnings:
+        flask.flash(f"Warning: {message}", "warning")
 
     student = models.Student(
         id=student_id,
@@ -416,6 +511,8 @@ def _parse_and_validate_project_form(
 
     req_levels: dict[str, int] = {}
     req_mands: dict[str, bool] = {}
+    # A1.3: collect skill-level problems instead of silently dropping them.
+    skill_errors: list[str] = []
 
     for skill in skills:
         level_raw = flask.request.form.get(f"req_level_{skill.id}", "").strip()
@@ -424,8 +521,31 @@ def _parse_and_validate_project_form(
             level = int(level_raw) if level_raw else 0
         except ValueError:
             level = 0
+            skill_errors.append(
+                f"Required level for skill '{skill.id}' must be a whole "
+                "number between 0 and 5."
+            )
+        else:
+            if not 0 <= level <= 5:
+                skill_errors.append(
+                    f"Required level for skill '{skill.id}' is {level}; "
+                    "it must be between 0 (not required) and 5."
+                )
         req_levels[skill.id] = level
         req_mands[skill.id] = is_mand
+
+    # A1.3: a requirement for a skill that is not in the catalog cannot be
+    # saved (foreign key), so tell the user instead of ignoring it.
+    known_skill_ids = {skill.id for skill in skills}
+    for key, value in flask.request.form.items():
+        if not key.startswith("req_level_"):
+            continue
+        skill_id = key.removeprefix("req_level_")
+        if skill_id not in known_skill_ids and value.strip() not in ("", "0"):
+            skill_errors.append(
+                f"Skill '{skill_id}' does not exist. Add it on the Skills "
+                "page first."
+            )
 
     form_data = {
         "id": project_id,
@@ -442,6 +562,15 @@ def _parse_and_validate_project_form(
             req_levels,
             req_mands,
             "Project title cannot be empty.",
+        )
+
+    if not min_capacity_raw or not max_capacity_raw:
+        return (
+            None,
+            form_data,
+            req_levels,
+            req_mands,
+            "Minimum and maximum capacity are both required.",
         )
 
     try:
@@ -472,6 +601,24 @@ def _parse_and_validate_project_form(
             req_levels,
             req_mands,
             "Minimum capacity cannot exceed maximum capacity.",
+        )
+
+    if max_capacity < 1:
+        return (
+            None,
+            form_data,
+            req_levels,
+            req_mands,
+            "Maximum capacity must be at least 1 seat.",
+        )
+
+    if skill_errors:
+        return (
+            None,
+            form_data,
+            req_levels,
+            req_mands,
+            " ".join(skill_errors),
         )
 
     requirements = [
