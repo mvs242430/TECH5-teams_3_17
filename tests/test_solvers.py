@@ -1,10 +1,12 @@
 """Unit tests for optimization solvers and distinct alternative generation."""
 
+import pyomo.environ as pyo
 import pytest
 
 from app.contract import contract
 from app.domain import models
 from app.engine import solvers
+from app.engine import strategies
 from app.samples import demo_data
 
 
@@ -33,6 +35,126 @@ def test_assignment_engine_raises_not_implemented() -> None:
     with pytest.raises(NotImplementedError) as exc_info:
         engine.execute_run(request)
     assert "TODO (Team B)" in str(exc_info.value)
+
+
+def test_base_model_solves_tiny_case() -> None:
+    """Verifies that the Pyomo base model solves a 3-student, 2-project case."""
+    students = [
+        models.Student(id="S1", display_name="Student 1"),
+        models.Student(id="S2", display_name="Student 2"),
+        models.Student(id="S3", display_name="Student 3"),
+    ]
+    projects = [
+        models.Project(id="P1", title="Project 1", max_capacity=2),
+        models.Project(
+            id="P2", title="Project 2", min_capacity=1, max_capacity=2
+        ),
+    ]
+
+    model, variables = strategies._build_base_model(students, projects)
+
+    results = model.solver.solve(model)
+    assert (
+        results.solver.termination_condition == pyo.TerminationCondition.optimal
+    )
+    assert sum(
+        pyo.value(variables[student.id, project.id])
+        for student in students
+        for project in projects
+    ) == len(students)
+
+
+def test_base_model_honours_fixed_lock() -> None:
+    """Verifies that fixed assignment locks force x[student, project] == 1."""
+    students = [
+        models.Student(id="S1", display_name="Student 1"),
+        models.Student(id="S2", display_name="Student 2"),
+    ]
+    projects = [
+        models.Project(id="P1", title="Project 1", max_capacity=2),
+        models.Project(id="P2", title="Project 2", max_capacity=2),
+    ]
+
+    model, variables = strategies._build_base_model(
+        students,
+        projects,
+        [models.FixedAssignment(student_id="S1", project_id="P2")],
+    )
+
+    results = model.solver.solve(model)
+    assert (
+        results.solver.termination_condition == pyo.TerminationCondition.optimal
+    )
+    assert pyo.value(variables["S1", "P2"]) == 1
+
+
+def test_base_model_forbids_students_below_mandatory_skill() -> None:
+    """Verifies that mandatory skill requirements forbid unqualified students."""
+    students = [
+        models.Student(
+            id="S1", display_name="Student 1", skills={"python": 1}
+        ),
+        models.Student(
+            id="S2", display_name="Student 2", skills={"python": 3}
+        ),
+    ]
+    projects = [
+        models.Project(
+            id="P1",
+            title="Python Project",
+            min_capacity=1,
+            max_capacity=1,
+            requirements=[
+                models.ProjectRequirement(
+                    project_id="P1",
+                    skill_id="python",
+                    minimum_level=2,
+                    is_mandatory=True,
+                )
+            ],
+        ),
+        models.Project(
+            id="P2", title="Other Project", min_capacity=1, max_capacity=1
+        ),
+    ]
+
+    model, variables = strategies._build_base_model(students, projects)
+
+    results = model.solver.solve(model)
+    assert (
+        results.solver.termination_condition == pyo.TerminationCondition.optimal
+    )
+    assert pyo.value(variables["S1", "P1"]) == 0
+    assert pyo.value(variables["S2", "P1"]) == 1
+
+
+@pytest.mark.parametrize(
+    "strategy",
+    [
+        strategies.PreferenceOrientedSolver(),
+        strategies.SkillFitOrientedSolver(),
+        strategies.BalancedTradeoffSolver(),
+    ],
+)
+def test_strategies_solve_standard_scenario(
+    strategy: solvers.AssignmentStrategy,
+) -> None:
+    """Verifies each strategy produces a valid optimal allocation on Standard."""
+    benchmark = demo_data.get_standard_scenario()
+
+    status, assignments, objective, diagnostics = strategy.solve(
+        benchmark["students"],
+        benchmark["projects"],
+        benchmark["fixed_assignments"],
+    )
+
+    assert status == "OPTIMAL"
+    assert objective is not None
+    assert len(assignments) == len(benchmark["students"])
+    assert diagnostics["solver"] == "appsi_highs"
+    assert all(
+        assignment.preference_rank is not None for assignment in assignments
+    )
 
 
 @pytest.mark.xfail(
@@ -68,3 +190,43 @@ def test_distinct_alternatives_generation() -> None:
             assert (
                 pairs_i != pairs_j
             ), f"Solution {i+1} and {j+1} are duplicate allocations!"
+
+
+def test_strategy_excludes_previous_solution() -> None:
+    """A no-good cut makes the next standard-scenario assignment differ."""
+    benchmark = demo_data.get_standard_scenario()
+    strategy = strategies.PreferenceOrientedSolver()
+
+    status, assignments, _, _ = strategy.solve(
+        benchmark["students"], benchmark["projects"]
+    )
+    first_pairs = [(a.student_id, a.project_id) for a in assignments]
+    alternative_status, alternative, _, _ = strategy.solve(
+        benchmark["students"],
+        benchmark["projects"],
+        excluded_solutions=[first_pairs],
+    )
+
+    assert status == "OPTIMAL"
+    assert alternative_status == "OPTIMAL"
+    assert first_pairs != [(a.student_id, a.project_id) for a in alternative]
+
+
+def test_strategy_reports_infeasible_when_only_solution_is_excluded() -> None:
+    """Excluding the sole valid assignment reports infeasibility."""
+    students = [models.Student(id="S1", display_name="One")]
+    projects = [
+        models.Project(id="P1", title="Only", min_capacity=1, max_capacity=1)
+    ]
+    strategy = strategies.PreferenceOrientedSolver()
+
+    status, assignments, _, _ = strategy.solve(students, projects)
+    pairs = [(a.student_id, a.project_id) for a in assignments]
+    alternative_status, alternative, objective, _ = strategy.solve(
+        students, projects, excluded_solutions=[pairs]
+    )
+
+    assert status == "OPTIMAL"
+    assert alternative_status == "INFEASIBLE"
+    assert alternative == []
+    assert objective is None
