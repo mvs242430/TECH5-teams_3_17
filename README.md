@@ -15,7 +15,7 @@ This repository provides the starter carcass for a three-week collaborative soft
 - **Project capacity constraints** (minimum and maximum headcount quotas)
 - **Administrative fixed assignments** (pre-allocated student-to-project locks)
 
-In accordance with the course specification (`assignment/projectTech5.tex`), the application avoids microservices, network communication, web APIs, or distributed deployment. It is structured as **two modular, independently testable components** running within a single in-process Python application:
+In accordance with the course specification, the application avoids microservices, network communication, web APIs, or distributed deployment. It is structured as **two modular, independently testable components** running within a single in-process Python application:
 
 ```text
 TECH5Project/
@@ -37,7 +37,6 @@ TECH5Project/
 │       ├── routes.py         # Flask views, controllers, & engine dispatch
 │       ├── templates/        # Jinja2 responsive HTML5 templates
 │       └── static/           # CSS stylesheets & client assets
-├── assignment/               # Course assignment brief (projectTech5.tex)
 ├── docs/                     # Deliverable documentation & student templates
 │   ├── analytical_note_template.md   # Deliverable 6 template for student report
 │   ├── analytical_formulation.md     # Analytical requirements & modeling guide
@@ -47,7 +46,7 @@ TECH5Project/
 │   ├── reproducible_demonstration.md # Demonstration walkthrough script
 │   ├── team_reflection_and_rubric.md # Collaboration reflection & rubric guide
 │   └── testing_and_quality.md        # Test matrix & edge case documentation
-├── tests/                    # Automated test suite (46 pytest tests)
+├── tests/                    # Automated test suite (51 pytest tests)
 ├── requirements.txt          # Python dependencies
 └── run.py                    # Application launch entry point
 ```
@@ -111,7 +110,7 @@ Navigate to **`http://127.0.0.1:5000`** in your browser.
 
 ## 4. Automated Testing & Verification
 
-The repository contains **50 automated tests** structured to guide development for both teams:
+The repository contains **51 automated tests** structured to guide development for both teams:
 
 ```powershell
 # Run the complete test suite
@@ -120,7 +119,7 @@ The repository contains **50 automated tests** structured to guide development f
 
 ### Understanding Test Results in the Starter Carcass:
 When you run pytest on the starter carcass, you will see:
-- **35 tests PASS**: Verifies domain models, 3NF database persistence, cohort validation, contract compliance, mock engine substitutability, dashboard, student/lock workflows, and scenario runners.
+- **36 tests PASS**: Verifies domain models, 3NF database persistence, cohort validation, contract compliance, mock engine substitutability, dashboard, student/lock workflows, and scenario runners.
 - **15 tests XFAIL (Expected Failures)**:
   - **Team A Tasks (3 xfails)** in `tests/test_visualization_component.py`:
     - `test_skills_crud_workflow`: Skill creation and catalog management.
