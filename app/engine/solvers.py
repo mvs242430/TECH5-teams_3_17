@@ -17,8 +17,75 @@ from app.contract import contract
 from app.domain import models
 from app.domain import validation
 from app.engine import metrics
-from app.engine.strategies import AssignmentStrategy
 from app.persistence import repositories
+
+
+class AssignmentStrategy(abc.ABC):
+    """Abstract Base Class for student-to-project allocation strategies.
+
+    Team B should derive concrete strategy subclasses implementing specific
+    objective functions (e.g. preference satisfaction, skill fit, balanced).
+    """
+
+    def __init__(self, name: str, description: str) -> None:
+        """Initializes the strategy with descriptive metadata.
+
+        Args:
+            name: Machine-readable identifier for the strategy.
+            description: Human-readable explanation of the objective function.
+        """
+        self.name = name
+        self.description = description
+
+    @abc.abstractmethod
+    def calculate_cost_or_utility(
+        self,
+        student: models.Student,
+        project: models.Project,
+        max_preferences: int,
+    ) -> float:
+        """Computes objective utility or cost weight for assigning student to project.
+
+        Args:
+            student: The candidate student.
+            project: The target semester project.
+            max_preferences: Maximum number of preferences ranked in cohort.
+
+        Returns:
+            Numerical weight reflecting desirability in optimization objective.
+        """
+
+    def solve(
+        self,
+        students: list[models.Student],
+        projects: list[models.Project],
+        fixed_assignments: list[models.FixedAssignment] | None = None,
+        excluded_solutions: list[list[tuple[str, str]]] | None = None,
+    ) -> tuple[str, list[models.Assignment], float | None, dict[str, Any]]:
+        """Solves the assignment problem under this strategy's formulation.
+
+        In accordance with Section 8 of the specification, must:
+        - Assign students to projects respecting capacities [min_cap, max_cap].
+        - Enforce each student receives exactly one project allocation.
+        - Strictly preserve pre-allocated fixed assignments.
+        - Support integer no-good cuts (excluded_solutions) to guarantee distinct
+          Pareto alternatives.
+
+        Args:
+            students: List of students in the cohort.
+            projects: List of available semester projects.
+            fixed_assignments: Pre-assigned student-project pairs that must hold.
+            excluded_solutions: Previous solution allocations to cut out.
+
+        Returns:
+            A tuple of (solver_status, assignments, objective_value, diagnostics).
+
+        Raises:
+            NotImplementedError: To be implemented by Team B.
+        """
+        raise NotImplementedError(
+            f"TODO (Team B): Implement solver logic for strategy '{self.name}'"
+        )
 
 
 class AssignmentEngine(contract.AssignmentEngineContract):

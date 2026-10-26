@@ -1,14 +1,13 @@
 """Assignment strategies implemented with Pyomo and HiGHS.
 
-This module provides the abstract AssignmentStrategy base class (Issue 0.5),
-the shared Pyomo base model builder with hard constraints (Issue B2.1), the
-three optimization strategies PREFERENCE, SKILL_FIT, and BALANCED (Issue B2.2),
-and integer no-good cut exclusion support for distinct alternatives (Issue B2.3).
+This module provides the shared Pyomo base model builder with hard constraints
+(Issue B2.1), the three optimization strategies PREFERENCE, SKILL_FIT, and
+BALANCED (Issue B2.2), and integer no-good cut exclusion support for distinct
+alternatives (Issue B2.3).
 """
 
 from __future__ import annotations
 
-import abc
 from typing import Any
 
 import pyomo.environ as pyo
@@ -17,6 +16,7 @@ from pyomo.common.errors import PyomoException
 from app.config import Config
 from app.domain import models
 from app.engine import metrics
+from app.engine.solvers import AssignmentStrategy
 
 
 def _build_base_model(
@@ -136,36 +136,8 @@ def _skill_fit(
         return sum(scores) / len(scores), unmet
 
 
-class AssignmentStrategy(abc.ABC):
-    """Abstract Base Class for student-to-project allocation strategies."""
-
-    def __init__(self, name: str, description: str) -> None:
-        """Initializes the strategy with descriptive metadata.
-
-        Args:
-            name: Machine-readable identifier for the strategy.
-            description: Human-readable explanation of the objective function.
-        """
-        self.name = name
-        self.description = description
-
-    @abc.abstractmethod
-    def calculate_cost_or_utility(
-        self,
-        student: models.Student,
-        project: models.Project,
-        max_preferences: int,
-    ) -> float:
-        """Computes objective utility weight for assigning student to project.
-
-        Args:
-            student: The candidate student.
-            project: The target semester project.
-            max_preferences: Maximum number of preferences ranked in cohort.
-
-        Returns:
-            Numerical weight reflecting desirability in optimization objective.
-        """
+class _PyomoAssignmentStrategy(AssignmentStrategy):
+    """Shared Pyomo + HiGHS implementation for concrete assignment strategies."""
 
     def solve(
         self,
@@ -312,7 +284,7 @@ class AssignmentStrategy(abc.ABC):
         )
 
 
-class PreferenceOrientedSolver(AssignmentStrategy):
+class PreferenceOrientedSolver(_PyomoAssignmentStrategy):
     """Maximizes ranked student preferences (minimizes rank regret)."""
 
     def __init__(self) -> None:
@@ -337,7 +309,7 @@ class PreferenceOrientedSolver(AssignmentStrategy):
         )
 
 
-class SkillFitOrientedSolver(AssignmentStrategy):
+class SkillFitOrientedSolver(_PyomoAssignmentStrategy):
     """Maximizes total student-project fractional skill fit."""
 
     def __init__(self) -> None:
@@ -355,7 +327,7 @@ class SkillFitOrientedSolver(AssignmentStrategy):
         return fit
 
 
-class BalancedTradeoffSolver(AssignmentStrategy):
+class BalancedTradeoffSolver(_PyomoAssignmentStrategy):
     """Balances normalized preference utility and fractional skill fit."""
 
     def __init__(
