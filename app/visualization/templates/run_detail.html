@@ -64,7 +64,7 @@
 
     <!-- Recommendations Teaser -->
     {% if recommendations %}
-      <div style="background: var(--primary-light); border: 1px solid #bfdbfe; border-radius: var(--radius-md); padding: 1rem 1.25rem; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
+      <div style="background: var(--primary-light); border: 1px solid #bfdbfe; border-radius: var(--radius-md); padding: 1rem 1.25rem; margin-bottom: 0.75rem; display: flex; justify-content: space-between; align-items: center;">
         <div>
           <strong style="color: var(--primary); font-size: 1rem;">&#128161; Decision-Support Recommendations Available</strong>
           <p style="color: #1e3a8a; font-size: 0.88rem; margin-top: 0.2rem;">
@@ -74,6 +74,25 @@
         <a href="{{ url_for('visualization_web.view_recommendations', run_id=run.id) }}" class="btn btn-primary">
           View Recommendations &rarr;
         </a>
+      </div>
+
+      <!-- Short at-a-glance summary: one badge per recommendation so the
+           coordinator can see which alternative won each priority focus
+           without navigating away from this run page. -->
+      <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: var(--radius-md);
+                  padding: 0.75rem 1.25rem; margin-bottom: 1.5rem;
+                  display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center;">
+        <span style="font-size: 0.82rem; font-weight: 600; color: var(--text-muted); margin-right: 0.25rem;">
+          Recommended:
+        </span>
+        {% for rec in recommendations %}
+          <a href="{{ url_for('visualization_web.view_recommendations', run_id=run.id) }}#rec-{{ loop.index }}"
+             class="badge {% if loop.index == 1 %}badge-success{% elif loop.index == 2 %}badge-primary{% else %}badge-secondary{% endif %}"
+             style="font-size: 0.78rem; padding: 0.3rem 0.65rem; text-decoration: none;"
+             title="{{ rec.priority_focus }}">
+            Alt #{{ rec.recommended_alternative_number }} &mdash; {{ rec.priority_focus }}
+          </a>
+        {% endfor %}
       </div>
     {% endif %}
 
