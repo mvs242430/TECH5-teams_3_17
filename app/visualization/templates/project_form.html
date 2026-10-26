@@ -21,41 +21,40 @@
       <div class="grid-2">
         <div class="form-group">
           <label class="form-label" for="id">Project Identifier:</label>
-          <input type="text" id="id" name="id" class="form-control" value="{{ project.id if project else '' }}" required {% if project %}readonly style="background: #f1f5f9;"{% endif %} placeholder="e.g. P5">
+          <input type="text" id="id" name="id" class="form-control" value="{{ form_data.id if form_data else (project.id if project else '') }}" required {% if project %}readonly style="background: #f1f5f9;"{% endif %} placeholder="e.g. P5">
           <span class="form-hint">Unique short code for the project.</span>
         </div>
 
         <div class="form-group">
           <label class="form-label" for="title">Project Title:</label>
-          <input type="text" id="title" name="title" class="form-control" value="{{ project.title if project else '' }}" required placeholder="e.g. AI-driven Supply Chain Analytics">
+          <input type="text" id="title" name="title" class="form-control" value="{{ form_data.title if form_data else (project.title if project else '') }}" required placeholder="e.g. AI-driven Supply Chain Analytics">
         </div>
       </div>
 
       <div class="form-group">
         <label class="form-label" for="description">Scope & Description:</label>
-        <textarea id="description" name="description" class="form-control" rows="3" placeholder="Brief outline of research goals, datasets, and deliverables...">{{ project.description if project else '' }}</textarea>
+        <textarea id="description" name="description" class="form-control" rows="3" placeholder="Brief outline of research goals, datasets, and deliverables...">{{ form_data.description if form_data else (project.description if project else '') }}</textarea>
       </div>
 
       <div class="grid-2">
         <div class="form-group">
           <label class="form-label" for="min_capacity">Minimum Capacity (Threshold):</label>
-          <input type="number" id="min_capacity" name="min_capacity" min="0" class="form-control" value="{{ project.min_capacity if project else 0 }}">
+          <input type="number" id="min_capacity" name="min_capacity" min="0" class="form-control" value="{{ form_data.min_capacity if form_data else (project.min_capacity if project else 0) }}">
           <span class="form-hint">Minimum students needed for project viability.</span>
         </div>
 
         <div class="form-group">
           <label class="form-label" for="max_capacity">Maximum Capacity Limit:</label>
-          <input type="number" id="max_capacity" name="max_capacity" min="1" class="form-control" value="{{ project.max_capacity if project else 3 }}" required>
+          <input type="number" id="max_capacity" name="max_capacity" min="1" class="form-control" value="{{ form_data.max_capacity if form_data else (project.max_capacity if project else 3) }}" required>
           <span class="form-hint">Maximum students that can be accommodated.</span>
         </div>
       </div>
 
-      <!-- TODO (Team A): Implement Skill Requirements Matrix -->
+      <!-- Skill Requirements Matrix -->
       <div class="form-group" style="margin-top: 1rem;">
         <label class="form-label">Skill Requirements:</label>
         <div style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1rem;">
           <p style="color: var(--text-muted); font-size: 0.88rem; margin-bottom: 0.75rem;">
-            <!-- TODO (Team A): Loop over catalogued skills, provide minimum level input and mandatory checkbox -->
             Configure required skill proficiency levels (0-5) and designate mandatory requirements:
           </p>
           <table class="data-table" style="background: transparent;">
@@ -68,13 +67,15 @@
             </thead>
             <tbody>
               {% for sk in skills %}
+                {% set cur_lvl = req_levels[sk.id] if req_levels and sk.id in req_levels else 0 %}
+                {% set cur_mand = req_mands[sk.id] if req_mands and sk.id in req_mands else false %}
                 <tr>
                   <td><strong>{{ sk.name }}</strong> (<code>{{ sk.id }}</code>)</td>
                   <td style="width: 150px;">
-                    <input type="number" name="req_level_{{ sk.id }}" min="0" max="5" class="form-control" value="0">
+                    <input type="number" name="req_level_{{ sk.id }}" min="0" max="5" class="form-control" value="{{ cur_lvl }}">
                   </td>
                   <td style="text-align: center; width: 150px;">
-                    <input type="checkbox" name="req_mand_{{ sk.id }}" value="1">
+                    <input type="checkbox" name="req_mand_{{ sk.id }}" value="1" {% if cur_mand %}checked{% endif %}>
                   </td>
                 </tr>
               {% endfor %}

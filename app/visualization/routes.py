@@ -391,14 +391,112 @@ def new_project_form() -> str:
 
 @web_bp.post("/projects/new")
 def create_project() -> flask.Response:
-    """Processes creation of a project.
+    """Processes creation of a new semester project.
 
-    Raises:
-        NotImplementedError: To be implemented by Team A.
+    Validates project metadata (ID, title, capacities) and constructs
+    the associated skill requirements matrix before persisting via
+    ProjectRepository.
+
+    Returns:
+        Redirect response to the project catalog view upon successful creation,
+        or a re-rendered form response with danger flash messages if validation fails.
     """
-    raise NotImplementedError(
-        "TODO (Team A): Implement project creation and requirement parsing"
+    if not auth.can_edit_cohort_data():
+        flask.flash("Permission denied for current role.", "danger")
+        return flask.redirect(flask.url_for("visualization_web.list_projects"))
+
+    project_id = flask.request.form.get("id", "").strip()
+    title = flask.request.form.get("title", "").strip()
+    description = flask.request.form.get("description", "").strip()
+    min_capacity_raw = flask.request.form.get("min_capacity", "").strip()
+    max_capacity_raw = flask.request.form.get("max_capacity", "").strip()
+
+    skills = repositories.SkillRepository().list_all()
+    req_levels: dict[str, int] = {}
+    req_mands: dict[str, bool] = {}
+
+    for skill in skills:
+        level_raw = flask.request.form.get(f"req_level_{skill.id}", "").strip()
+        is_mand = bool(flask.request.form.get(f"req_mand_{skill.id}"))
+        try:
+            level = int(level_raw) if level_raw else 0
+        except ValueError:
+            level = 0
+        req_levels[skill.id] = level
+        req_mands[skill.id] = is_mand
+
+    def _render_error(message: str) -> flask.Response:
+        flask.flash(message, "danger")
+        return flask.make_response(
+            flask.render_template(
+                "project_form.html",
+                project=None,
+                skills=skills,
+                form_data={
+                    "id": project_id,
+                    "title": title,
+                    "description": description,
+                    "min_capacity": min_capacity_raw,
+                    "max_capacity": max_capacity_raw,
+                },
+                req_levels=req_levels,
+                req_mands=req_mands,
+            )
+        )
+
+    if not project_id:
+        return _render_error("Project ID cannot be empty.")
+
+    if not title:
+        return _render_error("Project title cannot be empty.")
+
+    try:
+        min_capacity = int(min_capacity_raw)
+        max_capacity = int(max_capacity_raw)
+    except (ValueError, TypeError):
+        return _render_error("Capacities must be whole numbers.")
+
+    if min_capacity < 0 or max_capacity < 0:
+        return _render_error("Capacities cannot be negative.")
+
+    if min_capacity > max_capacity:
+        return _render_error(
+            "Minimum capacity cannot exceed maximum capacity."
+        )
+
+    project_repo = repositories.ProjectRepository()
+    if project_repo.get_by_id(project_id) is not None:
+        return _render_error(f"Project ID '{project_id}' already exists.")
+
+    requirements: list[models.ProjectRequirement] = [
+        models.ProjectRequirement(
+            project_id=project_id,
+            skill_id=skill.id,
+            minimum_level=req_levels[skill.id],
+            is_mandatory=req_mands[skill.id],
+        )
+        for skill in skills
+        if 1 <= req_levels[skill.id] <= 5
+    ]
+
+    project = models.Project(
+        id=project_id,
+        title=title,
+        description=description,
+        min_capacity=min_capacity,
+        max_capacity=max_capacity,
+        requirements=requirements,
     )
+
+    try:
+        project_repo.save(project)
+    except sqlite3.IntegrityError as exc:
+        return _render_error(
+            f"Database constraint error while saving project: {exc}"
+        )
+
+    flask.flash(f"Project '{project_id}' created.", "success")
+    return flask.redirect(flask.url_for("visualization_web.list_projects"))
 
 
 @web_bp.get("/projects/<project_id>/edit")
