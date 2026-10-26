@@ -650,3 +650,192 @@ def test_student_update_with_bad_data_keeps_old_values(seeded_client) -> None:
     saved = repositories.StudentRepository().get_by_id("S2")
     assert saved.get_skill_level("py") == 2
     assert [p.project_id for p in saved.preferences] == ["P1", "P2", "P3"]
+
+
+def test_project_mandatory_skill_requires_level(seeded_client) -> None:
+    """Ticking Mandatory with skill level 0 is rejected on create and edit (A1.2.1)."""
+    # 1. Create with mandatory ticked but level 0
+    res_create = _post_project(
+        seeded_client, req_level_py="0", req_mand_py="1"
+    )
+    assert res_create.status_code == 200
+    assert b"Cannot mark skill" in res_create.data
+    assert b"mandatory without selecting a required minimum level" in res_create.data
+    assert b'name="req_mand_py" value="1" checked' in res_create.data
+    assert repositories.ProjectRepository().get_by_id("PX") is None
+
+    # 2. Edit existing project P1 with mandatory ticked and level 0
+    res_edit = seeded_client.post(
+        "/projects/P1/edit",
+        data={
+            "title": "Project P1 Edited",
+            "description": "",
+            "min_capacity": "1",
+            "max_capacity": "3",
+            "req_level_py": "0",
+            "req_mand_py": "1",
+        },
+        follow_redirects=True,
+    )
+    assert res_edit.status_code == 200
+    assert b"Cannot mark skill" in res_edit.data
+    p1 = repositories.ProjectRepository().get_by_id("P1")
+    assert p1 is not None
+    assert p1.title == "Project P1"
+    assert len(p1.requirements) == 0
+
+
+def test_projects_edge_cases_and_full_layers(tmp_path: pathlib.Path) -> None:
+    """Verifies empty-ID state retention, catalog badges, edit prefill, and DB cascades (A1.2.2)."""
+    db_file = tmp_path / "test_proj_layers.db"
+    app = create_app({"TESTING": True, "DATABASE_PATH": db_file})
+    client = app.test_client()
+    client.post("/set-role", data={"role": "ADMIN"}, follow_redirects=True)
+
+    repositories.SkillRepository().save(
+        models.Skill(id="py", name="Python", description="Python Programming")
+    )
+    repositories.SkillRepository().save(
+        models.Skill(id="sql", name="SQL", description="Database Querying")
+    )
+
+    # 1. Empty project ID retains entered skill levels and mandatory checkboxes
+    res_empty_id = client.post(
+        "/projects/new",
+        data={
+            "id": "",
+            "title": "Draft Project",
+            "description": "Draft scope",
+            "min_capacity": "1",
+            "max_capacity": "3",
+            "req_level_py": "4",
+            "req_mand_py": "1",
+        },
+        follow_redirects=True,
+    )
+    assert res_empty_id.status_code == 200
+    assert b"Project ID cannot be empty" in res_empty_id.data
+    assert b'name="req_level_py" min="0" max="5" class="form-control" value="4"' in res_empty_id.data
+    assert b'name="req_mand_py" value="1" checked' in res_empty_id.data
+
+    # 2. Create project with mandatory (py=4) and nice-to-have (sql=2) requirements
+    res_create = client.post(
+        "/projects/new",
+        data={
+            "id": "P10",
+            "title": "Data Platform",
+            "description": "End-to-end lakehouse",
+            "min_capacity": "1",
+            "max_capacity": "3",
+            "req_level_py": "4",
+            "req_mand_py": "1",
+            "req_level_sql": "2",
+        },
+        follow_redirects=True,
+    )
+    assert res_create.status_code == 200
+    assert b"1 &ndash; 3 seats" in res_create.data
+    assert b"py: L4 (Must-have)" in res_create.data
+    assert b"sql: L2 (Nice-to-have)" in res_create.data
+
+    # Verify raw SQLite rows in projects and project_requirements
+    db = repositories.ProjectRepository().db
+    proj_rows = db.execute_query(
+        "SELECT id, title, min_capacity, max_capacity FROM projects WHERE id = ?;",
+        ("P10",),
+    )
+    assert len(proj_rows) == 1
+    assert proj_rows[0]["min_capacity"] == 1
+    assert proj_rows[0]["max_capacity"] == 3
+
+    req_rows = db.execute_query(
+        "SELECT skill_id, minimum_level, is_mandatory FROM project_requirements "
+        "WHERE project_id = ? ORDER BY skill_id ASC;",
+        ("P10",),
+    )
+    assert len(req_rows) == 2
+    assert dict(req_rows[0]) == {
+        "skill_id": "py",
+        "minimum_level": 4,
+        "is_mandatory": 1,
+    }
+    assert dict(req_rows[1]) == {
+        "skill_id": "sql",
+        "minimum_level": 2,
+        "is_mandatory": 0,
+    }
+
+    # 3. Edit form pre-fills checked attribute for mandatory py and not for sql
+    res_edit_get = client.get("/projects/P10/edit")
+    assert res_edit_get.status_code == 200
+    assert b'name="req_mand_py" value="1" checked>' in res_edit_get.data
+    assert b'name="req_mand_sql" value="1" >' in res_edit_get.data
+
+    # 4. Edit project to remove sql (req_level_sql=0) and verify SQLite sync
+    res_edit_post = client.post(
+        "/projects/P10/edit",
+        data={
+            "title": "Data Platform v2",
+            "description": "Updated lakehouse",
+            "min_capacity": "2",
+            "max_capacity": "4",
+            "req_level_py": "5",
+            "req_mand_py": "1",
+            "req_level_sql": "0",
+        },
+        follow_redirects=True,
+    )
+    assert res_edit_post.status_code == 200
+    assert b"2 &ndash; 4 seats" in res_edit_post.data
+    assert b"py: L5 (Must-have)" in res_edit_post.data
+    assert b"sql: L2" not in res_edit_post.data
+
+    req_rows_after = db.execute_query(
+        "SELECT skill_id, minimum_level, is_mandatory FROM project_requirements "
+        "WHERE project_id = ?;",
+        ("P10",),
+    )
+    assert len(req_rows_after) == 1
+    assert req_rows_after[0]["skill_id"] == "py"
+    assert req_rows_after[0]["minimum_level"] == 5
+
+    # 5. Seed student preference and fixed assignment, then delete P10 and verify cascades
+    repositories.StudentRepository().save(
+        models.Student(
+            id="S100",
+            display_name="Cascade Student",
+            preferences=[
+                models.Preference(student_id="S100", project_id="P10", rank=1)
+            ],
+        )
+    )
+    repositories.FixedAssignmentRepository().save(
+        models.FixedAssignment(
+            student_id="S100",
+            project_id="P10",
+            status="APPROVED",
+            reason="Lock test",
+        )
+    )
+
+    res_del = client.post("/projects/P10/delete", follow_redirects=True)
+    assert res_del.status_code == 200
+    assert (
+        db.execute_query("SELECT * FROM projects WHERE id = 'P10';") == []
+    )
+    assert (
+        db.execute_query(
+            "SELECT * FROM project_requirements WHERE project_id = 'P10';"
+        )
+        == []
+    )
+    assert (
+        db.execute_query("SELECT * FROM preferences WHERE project_id = 'P10';")
+        == []
+    )
+    assert (
+        db.execute_query(
+            "SELECT * FROM fixed_assignments WHERE project_id = 'P10';"
+        )
+        == []
+    )

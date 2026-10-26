@@ -531,6 +531,12 @@ def _parse_and_validate_project_form(
                     f"Required level for skill '{skill.id}' is {level}; "
                     "it must be between 0 (not required) and 5."
                 )
+            elif is_mand and level == 0:
+                skill_errors.append(
+                    f"Cannot mark skill '{skill.name}' ({skill.id}) as "
+                    "mandatory without selecting a required minimum level "
+                    "(1-5)."
+                )
         req_levels[skill.id] = level
         req_mands[skill.id] = is_mand
 
@@ -664,24 +670,17 @@ def create_project() -> flask.Response:
 
     if not project_id:
         flask.flash("Project ID cannot be empty.", "danger")
+        _, form_data, req_levels, req_mands, _ = (
+            _parse_and_validate_project_form("", skills)
+        )
         return flask.make_response(
             flask.render_template(
                 "project_form.html",
                 project=None,
                 skills=skills,
-                form_data={
-                    "id": "",
-                    "title": flask.request.form.get("title", "").strip(),
-                    "description": flask.request.form.get(
-                        "description", ""
-                    ).strip(),
-                    "min_capacity": flask.request.form.get(
-                        "min_capacity", ""
-                    ).strip(),
-                    "max_capacity": flask.request.form.get(
-                        "max_capacity", ""
-                    ).strip(),
-                },
+                form_data=form_data,
+                req_levels=req_levels,
+                req_mands=req_mands,
             )
         )
 
