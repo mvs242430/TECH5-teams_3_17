@@ -1,115 +1,111 @@
 # Deliverable: Week 2 Progress Report & Implementation Decisions
 
 **Project:** TECH5 Student-to-Project Assignment Decision Support System (DSS)  
-**Team:** 6 (Groups 3 and 17)  
-**Repository:** [`mvs242430/TECH5-teams_3_17`](https://github.com/mvs242430/TECH5-teams_3_17)   
-**Milestone:** Week 2 — *Implement, Verify, and Integrate*  
-**Date:** 27th October 2026  
+**Team:** 6 (Groups 3 and 17 — 5 Members)  
+**Repository:** [`mvs242430/TECH5-teams_3_17`](https://github.com/mvs242430/TECH5-teams_3_17)  
+**Milestone:** Week 2 — *Implement, Integrate, and Replace Mock Engine*  
+**Date:** 26 October 2026  
 
 ---
 
-## 1. Executive Summary & Status
+## 1. Week 2 Milestone & Requirements Checklist
 
-During Week 2, the team transitioned to feature implementation on dedicated branches. This report documents the decisions, architectural boundaries, and test verification for **Task A1.1 (Skills CRUD & Validation)**, completed by Marie.
+All Week 2 functional, integration, and documentation goals are **100% complete on `main`**:
 
-### Status at a Glance
-- **Issue:** [`A1.1`](../team_related/issues/A1.1.md) · Branch: `a1.1-skills` (merged into `main`)
-- **Pytest:** `37 passed, 14 xfailed` (`test_skills_crud_workflow` PASSED; 0 regressions)
-- **Scope:** [`routes.py`](../../app/visualization/routes.py), [`skills.html`](../../app/visualization/templates/skills.html), [`test_visualization_component.py`](../../tests/test_visualization_component.py)
+| Week 2 Requirement | Status | Evidence in Repository |
+| :--- | :---: | :--- |
+| **Team B implements the assignment approach in `solvers.py` and analytical metrics in `metrics.py`, replacing the mock engine.** | ✅ **Done** | [`app/engine/solvers.py`](../../app/engine/solvers.py), [`app/engine/strategies.py`](../../app/engine/strategies.py), and [`app/engine/metrics.py`](../../app/engine/metrics.py) fully implemented; `AssignmentEngine.execute_run` runs live Pyomo/HiGHS MILP optimization without falling back to `MockAssignmentEngine`. |
+| **Team A implements the multi-solution comparison view and transparent recommendation logic.** | ✅ **Done** | [`app/visualization/routes.py`](../../app/visualization/routes.py), [`compare.html`](../../app/visualization/templates/compare.html), [`recommendations.html`](../../app/visualization/templates/recommendations.html), and [`solution_detail.html`](../../app/visualization/templates/solution_detail.html) render live side-by-side deltas, plain-language trade-offs, policy advice, and interactive **Lock & Rerun**. |
+| **Both teams run automated integration tests to verify that real engine solutions flow smoothly into the user interface.** | ✅ **Done** | `.venv/bin/python -m pytest -q` $\rightarrow$ **`85 passed in 1.86s` (`0 failed`, `0 xfailed`)**, including all 15 baseline `xfail` tests plus 34 new unit/integration tests added by the team. |
+| **Milestone: Solves real cohorts, retains multiple alternatives, and displays live comparisons without mock data.** | ✅ **Done** | Verified across all 4 Benchmark Scenarios (`standard`, `fixed`, `infeasible`, `conflicting`). Standard cohort generates 3 distinct Pareto solutions (`PREFERENCE`, `SKILL_FIT`, `BALANCED`) via integer no-good cuts. |
+| **Deliverable: Report with details about implementation decisions and documentation.** | ✅ **Done** | Documented in Section 3 below and in 15 per-issue architectural decision logs under [`docs/team_related/issues_solutions/`](../team_related/issues_solutions/). |
 
-### Team Task Progress
+---
 
-| Member | Responsibility | Allocated Tasks Done | Tasks Done for Other Members |
+## 2. Team Contributions & GitHub Insights
+
+### 2.1 Member Responsibilities & Completed Work
+
+| Member | Sub-Team & Role | Completed Tasks Merged to `main` | Key Files Delivered |
 | :--- | :--- | :--- | :--- |
-| **Julia** | A1 | — | — |
-| **Tanver** | A2 | — | — |
-| **Daniel** | B1 | — | — |
-| **Torkil** | B2 | — | — |
-| **Marie** | B3 | — | [`A1.1`](../team_related/issues/A1.1.md) Skills: add and delete |
+| **Julia** | **Team A (`A1`)** · Data Management, Validation & DB Docs | [`A1.2`](../team_related/issues_solutions/A1.2_solution.md) Projects CRUD & requirement matrix<br>[`A1.3`](../team_related/issues_solutions/A1.3_solution.md) Pre-solver UI validation & error banners<br>[`A1.4`](../team_related/issues_solutions/A1.4_solution.md) 3NF relational database documentation | [`routes.py`](../../app/visualization/routes.py), [`projects.html`](../../app/visualization/templates/projects.html), [`project_form.html`](../../app/visualization/templates/project_form.html), [`database_design.md`](../database_design.md) |
+| **Tanver** | **Team A (`A2`)** · Comparison View, Recommendations & UX | [`A2.1`](../team_related/issues_solutions/A2.1_solution.md) Side-by-side `/compare` view & delta cards<br>[`A2.2`](../team_related/issues_solutions/A2.2_solution.md) Transparent `/recommendations/<run_id>` UI<br>[`A2.3`](../team_related/issues_solutions/A2.3_solution.md) Interactive **Lock & Rerun** workflow | [`routes.py`](../../app/visualization/routes.py), [`compare.html`](../../app/visualization/templates/compare.html), [`recommendations.html`](../../app/visualization/templates/recommendations.html), [`solution_detail.html`](../../app/visualization/templates/solution_detail.html) |
+| **Daniel** | **Team B (`B1`)** · Analytical Metrics & Fairness | [`B1.1`](../team_related/issues_solutions/B1.1_solution.md) Skill-fit score & Gini inequality index<br>[`B1.2`](../team_related/issues_solutions/B1.2_solution.md) 4-pillar solution indicators<br>[`B1.3`](../team_related/issues_solutions/B1.3_solution.md) Pairwise solution trade-off comparator | [`app/engine/metrics.py`](../../app/engine/metrics.py), [`tests/test_metrics.py`](../../tests/test_metrics.py) |
+| **Torkil** | **Team B (`B2`)** · MILP Optimization & Strategies | [`0.3`](../team_related/issues_solutions/0.3_solution.md) Pyomo & HiGHS solver setup<br>[`B2.1`](../team_related/issues_solutions/B2.1_solution.md) Base MILP model & `PreferenceOrientedSolver`<br>[`B2.2`](../team_related/issues_solutions/B2.2_solution.md) `SkillFitOrientedSolver` & `BalancedTradeoffSolver`<br>[`B2.3`](../team_related/issues_solutions/B2.3_solution.md) Integer no-good cuts for distinct alternatives | [`app/engine/strategies.py`](../../app/engine/strategies.py), [`requirements.txt`](../../requirements.txt), [`tests/test_solvers.py`](../../tests/test_solvers.py) |
+| **Marie** | **Team B (`B3`)** · Engine Orchestration, Edge Cases & QA Integration | [`A1.1`](../team_related/issues_solutions/A1.1_solution.md) Skills CRUD & dependency checks<br>[`B3.1`](../team_related/issues_solutions/B3.1_solution.md) `AssignmentEngine.execute_run` orchestration<br>[`B3.2`](../team_related/issues_solutions/B3.2_solution.md) Contract & integration test activation<br>[`B3.3`](../team_related/issues_solutions/B3.3_solution.md) Infeasibility & validation diagnostics<br>[`B3.4`](../team_related/issues_solutions/B3.4_solution.md) All 15 solver & domain edge cases | [`app/engine/solvers.py`](../../app/engine/solvers.py), [`tests/test_edge_cases.py`](../../tests/test_edge_cases.py), [`tests/test_component_integration.py`](../../tests/test_component_integration.py), [`tests/test_contract_and_engine.py`](../../tests/test_contract_and_engine.py) |
+
+### 2.2 Note on GitHub Insights
+
+![GitHub Insights Week 2 Overview](github_insights_w2.png)
+
+> **Why GitHub Insights displays 7 authors:**  
+> Our team has **5 students** (Julia, Tanver, Daniel, Torkil, and Marie). GitHub Pulse counts **7 distinct commit identities** because:
+> 1. Marie commited from 2 different accounts.
+> 3. 1 commit from GitHub Copilot / starter setup.
 
 ---
 
-## 2. Technical Decisions & Architectural Rationale
+## 3. Key Implementation & Architectural Decisions
 
-### 2.1 Architectural Patterns Applied
+### 3.1 Component B — Mathematical Optimization Engine (`app/engine/`)
 
-1. **Model-View-Controller (MVC) via Flask Blueprints:**
-   - In [`routes.py`](../../app/visualization/routes.py), the route functions `create_skill` and `delete_skill` serve strictly as **Controllers**. They parse form inputs, enforce role-based access control, apply business validation rules, invoke persistence methods, and return view responses.
-   - The view layer ([`skills.html`](../../app/visualization/templates/skills.html)) handles presentation, conditional role-based action buttons, and modal dialogs.
-2. **Repository Pattern:**
-   - Database operations are completely encapsulated behind [`SkillRepository`](../../app/persistence/repositories.py), [`StudentRepository`](../../app/persistence/repositories.py), and [`ProjectRepository`](../../app/persistence/repositories.py). Routes never execute raw SQL statements, adhering strictly to the modular monolith boundaries.
-3. **Role-Based Access Control (RBAC):**
-   - Mutating routes verify authorization using `auth.can_edit_cohort_data()` at execution entry. Non-admin roles (such as `Student Viewer` or unauthenticated sessions) receive an explicit `"Permission denied"` flash alert and are redirected.
-
----
-
-### 2.2 Key Engineering & Design Decisions
-
-| Decision Area | Chosen Approach | Rationale & Trade-offs |
+| Decision Area | Chosen Approach | Rationale & Trade-Offs |
 | :--- | :--- | :--- |
-| **Identifier Format** | Regex `^[a-z0-9_]+$` | Restricting skill IDs to lowercase alphanumeric characters and underscores prevents URI encoding issues, shell escaping pitfalls, and case-mismatch inconsistencies across relational joins. |
-| **Sticky Form State** | Re-render view with `form_data` (HTTP 200) on validation error | Instead of an immediate HTTP 302 redirect that clears user inputs upon error, re-rendering `skills.html` retains the user's entered name and description. Users only need to correct the invalid identifier rather than retyping the entire form. |
-| **Error Feedback** | Red input border (`.is-invalid`) + Flash banner | When an ID conflict or format error occurs, the server sets `has_id_error=True`, rendering a highlighted `2px solid #dc2626` border and focus glow around the identifier input box for clear visual hierarchy. |
-| **Referential Integrity** | Pre-delete dependency check across students & projects | Before deleting a skill, `delete_skill` queries `StudentRepository` and `ProjectRepository`. If any student possesses the skill or any project requires it, deletion is blocked with an informative flash alert (e.g. *"Cannot delete skill: still referenced by 2 student(s) and 1 project(s)"*), preventing accidental data corruption. |
-| **Confirmation UX** | Custom In-App Modal Dialog | Rather than relying on browser-native `window.confirm()` popups (which look generic and vary across operating systems), an in-app CSS/JS modal was built directly into `skills.html`. It displays the skill name in brackets, an amber warning badge, a `Cancel` button, and a `Yes, Delete` danger button. |
-| **Navigation State** | Client-side DOM class binding (`active`) | Added DOM initialization that adds `.active` (`color: #38bdf8`) to the Skills navigation tab on page load, providing clear visual orientation within the DSS navbar. |
+| **MILP Modeling & Solver (`0.3`, `B2.1`)** | **Pyomo (`pyomo>=6.7`) + HiGHS (`highspy>=1.7` / `appsi_highs`)** | Provides an industrial-grade, deterministic Mixed-Integer Linear Programming solver pip-installable across macOS and Windows without external C++ system dependencies. Solves our 10-student, 4-project cohort in `< 0.05s`. |
+| **Class Placement (`solvers.py` vs. `strategies.py`)** | Keep `AssignmentStrategy` ABC in [`solvers.py`](../../app/engine/solvers.py); place concrete Pyomo strategies in [`strategies.py`](../../app/engine/strategies.py) | Preserves 100% compatibility with the starter carcass (`solvers.AssignmentStrategy`) while keeping the 370-line Pyomo model builder and 3 concrete strategy classes modular and conflict-free while B2 and B3 worked in parallel. |
+| **3 Optimization Strategies (`B2.1`, `B2.2`)** | 1. `PreferenceOrientedSolver` (`"PREFERENCE"`): $w_{s,p} = M - r_{s,p} + 1$<br>2. `SkillFitOrientedSolver` (`"SKILL_FIT"`): $w_{s,p} = \text{fit}(s, p) \in [0, 1]$<br>3. `BalancedTradeoffSolver` (`"BALANCED"`): $\alpha \hat{f}_{\text{pref}} + (1-\alpha)\hat{f}_{\text{skill}}$ ($\alpha = 0.5$) | Normalizing preference utility $\hat{f}_{\text{pref}} \in [0, 1]$ and skill fit $\hat{f}_{\text{skill}} \in [0, 1]$ onto the same unit interval prevents preference rank magnitudes from dominating skill fit in the balanced strategy. |
+| **Distinct Pareto Alternatives (`B2.3`, `B3.1`)** | **Strategy Rotation + Integer No-Good Cuts** ($\sum_{(s,p) \in A^{(k)}} x_{s,p} \le |S| - 1$) | In `execute_run`, the engine rotates across `PREFERENCE` $\rightarrow$ `SKILL_FIT` $\rightarrow$ `BALANCED` while accumulating `excluded_solutions`. This guarantees both multi-objective diversity on the Standard Scenario and strict non-duplication when two strategies share an unconstrained optimum (Edge Cases 14 & 15). |
+| **Graceful Infeasibility Handling (`B2.1`, `B3.3`)** | `model.solver.solve(model, load_solutions=False)` + pre/post validation diagnostics | Calling `load_solutions=False` prevents Pyomo from raising `ValueError` when a model has no feasible solution. `execute_run` distinguishes `INFEASIBLE` (capacity deficit / impossible mandatory skill) from `INVALID_INPUT` (structural/contradictory locks) and persists actionable reasons in `run.diagnostics["reasons"]`. |
+| **Skill-Fit & Fairness Metrics (`B1.1–B1.3`)** | Fractional capped skill fit $\min(\ell_{s,k}/m_{p,k}, 1.0)$; pairwise Gini coefficient; unranked penalty rank $M + 1$ | Prevents over-qualification in one skill from masking a deficit in another required skill; treating unranked assignments as $M + 1$ in fairness calculations prevents unranked allocations from artificially lowering `mean_rank`. |
 
+### 3.2 Component A — Visualization, Comparison & Decision Support (`app/visualization/`)
 
-## 1. Executive Summary & Status
-
-During Week 2, I worked on **B1 — analytical metrics and solution comparison** in `app/engine/metrics.py`. The purpose was to replace mock analytical results with real metrics that can be used by the assignment engine and Team A's user interface.
-
-### Status at a Glance
-
-- **B1.1:** Skill-fit score and Gini coefficient implemented.
-- **B1.2:** Solution indicators for feasibility, efficiency, fairness, and capacity implemented.
-- **B1.3:** Comparison of two alternative solutions implemented.
-- **Main files:** `app/engine/metrics.py`, `tests/test_metrics.py`
-- **Verification:** The implemented B1 metric tests pass locally. Final full-suite pytest output should be recorded before submission.
-
----
-
-## 2. Technical Decisions & Implementation Rationale
-
-### 2.1 Analytical Structure
-
-The analytical calculations were kept inside **Component B (`app/engine`)** so that the assignment engine remains independent of Flask and the visualization layer. The functions return structured dictionaries that can be consumed by Team A without requiring UI-specific logic inside the engine.
-
-The solution indicators were divided into four categories:
-
-- **Feasibility:** checks whether assignment rules and constraints are respected.
-- **Efficiency:** measures student-project skill fit and unmet optional requirements.
-- **Fairness:** evaluates preference ranks and inequality of assignment outcomes.
-- **Capacity:** measures project utilisation.
-
----
-
-### 2.2 Key Design Decisions
-
-| Decision Area | Chosen Approach | Rationale |
+| Decision Area | Chosen Approach | Rationale & Trade-Offs |
 | :--- | :--- | :--- |
-| **Skill-fit scoring** | Each requirement is scored as `min(student level / required level, 1.0)` and the scores are averaged. | Creates a comparable score between 0 and 1 while preventing overqualification from increasing the score above full satisfaction. |
-| **Edge cases in skill fit** | Projects without requirements receive a score of `1.0`; zero-level requirements are handled without division by zero. | Makes the metric robust for valid edge cases. |
-| **Gini fairness measure** | Gini is calculated from pairwise absolute differences; empty/all-zero inputs return `0.0`, while negative inputs are rejected. | Provides a reusable measure of inequality while avoiding invalid calculations. |
-| **Unranked assignments** | Unranked assignments are excluded from `mean_rank`, counted separately, and treated as one rank worse than the worst stated preference when calculating fairness comparisons. | Prevents unranked assignments from making the average rank look artificially better while still reflecting their negative fairness effect. |
-| **Feasibility separated from quality** | Constraint violations are reported independently from efficiency and fairness metrics. | A solution can be identified as infeasible rather than simply appearing to have poor analytical scores. |
-| **Stable indicator structure** | Fixed key names are returned for feasibility, efficiency, fairness, and capacity. | Team A and the recommendation logic read these values directly, so consistent names are necessary for integration. |
-| **Solution comparison** | Changes are calculated consistently as **Solution B − Solution A**, including skill fit, mean rank, unranked assignments, and Gini. | Gives all comparison values a consistent interpretation. |
-| **Changed assignments** | Only students assigned to a different project in the two solutions are included in the detailed comparison. | Keeps the comparison focused on meaningful allocation changes. |
-| **Rounding** | Comparison deltas are rounded to four decimal places. | Avoids floating-point artefacts and gives stable values for tests and presentation. |
-| **Trade-off summaries** | Numerical comparison results are also converted into short human-readable statements. | Makes the DSS easier to interpret for users who do not want to evaluate raw metrics alone. |
+| **Side-by-Side Comparison (`/compare`, `A2.1`)** | 5 KPI Delta Cards ($\Delta$ Changed Students, $\Delta$ Skill Fit, $\Delta$ Mean Rank, $\Delta$ Gini, Rank Shifts) + Plain-Language Impact Box | Translates raw numerical deltas (`Solution B - Solution A`) into an immediately scannable **"Improves / Gets worse / Who is affected"** summary alongside the student-level reallocation table enriched with full student names and project titles. |
+| **Transparent Recommendations (`/recommendations/<run_id>`, `A2.2`)** | 3 Policy Lenses (*Preference Maximization*, *Skill Quality*, *Egalitarian Fairness*) with separated **Criteria**, **Calculated Evidence**, and **Policy Advice** | Strictly separates objective mathematical facts computed by Component B from normative decision guidance, allowing coordinators to justify their chosen allocation transparently. Also added quick-jump recommendation badges directly on `/runs/<run_id>`. |
+| **Interactive Lock & Rerun (`A2.3`)** | Single-click form on `/solutions/<id>` (`POST /solutions/<id>/lock-and-rerun`) preserving the original run's strategy and `max_alternatives` | Allows coordinators to pin a student-project pair from any candidate solution, persist it as an `APPROVED` `FixedAssignment`, and immediately re-optimize to inspect the ripple effect on peer students. |
+| **Data Management & Referential Integrity (`A1.1–A1.3`)** | Sticky form state on validation errors, mandatory skill level auto-default ($\ge 1$), and pre-delete dependency checks | Prevents accidental deletion of skills still referenced by students or projects, and retains user input on validation failure instead of clearing forms via redirect. |
 
 ---
 
-## 3. Verification & Documentation
+## 4. End-to-End Verification & Benchmark Results
 
-The implementation was verified using `pytest`, with the B1 tests activated after the corresponding functions were implemented.
+### 4.1 Automated Test Suite (`85 passed, 0 xfailed`)
 
-```bash
-python -m pytest tests/test_metrics.py -q
-python -m pytest -q
+All **51 original starter tests** (including all 15 previously `xfailed` target tasks) plus **34 new unit and integration tests** pass:
+
+```text
+$ .venv/bin/python -m pytest -q
+........................................................................ [ 84%]
+.............                                                            [100%]
+85 passed in 1.86s
 ```
 
-The B1 implementation is also documented according to the repository's solution-documentation rules, describing the main analytical decisions, data flow, modified files, and verification results.
+| Test Module | Layer Verified | Result |
+| :--- | :--- | :---: |
+| [`tests/test_metrics.py`](../../tests/test_metrics.py) | Skill fit, Gini coefficient, 4-pillar solution indicators, pairwise solution comparison (`B1.1–B1.3`) | `17 passed` |
+| [`tests/test_solvers.py`](../../tests/test_solvers.py) | Base MILP constraints, fixed locks, mandatory skills, 3 concrete strategies, integer no-good cuts (`B2.1–B2.3`, `B3.1–B3.2`) | `12 passed` |
+| [`tests/test_edge_cases.py`](../../tests/test_edge_cases.py) | All 15 specification edge cases (incomplete/tied preferences, zero skills/requirements, capacity deficits, no-good cuts) (`B3.4`) | `15 passed` |
+| [`tests/test_contract_and_engine.py`](../../tests/test_contract_and_engine.py) | `AssignmentEngineContract` compliance, validation outcomes, persistence & retrieval (`B3.1–B3.2`) | `5 passed` |
+| [`tests/test_visualization_component.py`](../../tests/test_visualization_component.py) | RBAC, Skills & Projects CRUD, validation alerts, `/compare`, `/recommendations`, Lock & Rerun (`A1.1–A1.3`, `A2.1–A2.3`) | `28 passed` |
+| [`tests/test_component_integration.py`](../../tests/test_component_integration.py) | Full lifecycle seed $\rightarrow$ solve $\rightarrow$ view $\rightarrow$ recommend $\rightarrow$ compare $\rightarrow$ lock & rerun + infeasible cohort flow | `2 passed` |
+| [`tests/test_database_integrity.py`](../../tests/test_database_integrity.py) | SQLite 3NF schema constraints, foreign keys, cascades, and repository round-trips | `6 passed` |
 
-The main integration objective is that real solutions generated by Team B can be evaluated in `metrics.py` and passed in a predictable structure to Team A's comparison and recommendation views without relying on mock analytical data.
+### 4.2 Live Benchmark Scenarios Verification (Zero Mock Data)
+
+| Scenario (`/scenarios`) | Engine Status | Alternatives Generated | Live Outcome & Trade-Offs |
+| :--- | :---: | :---: | :--- |
+| **1. Standard Trade-Off Benchmark** (`standard`) | `COMPLETED` | **3 Distinct Solutions** | • **Alt #1 (`PREFERENCE`):** Mean Rank `1.00`, Worst Rank `1`, Gini `0.0000`, Skill Fit `98.3%`<br>• **Alt #2 (`SKILL_FIT`):** Mean Rank `1.20`, Worst Rank `2`, Gini `0.1333`, Skill Fit `100.0%`<br>• **Alt #3 (`BALANCED`):** Mean Rank `1.10`, Worst Rank `2`, Gini `0.0818`, Skill Fit `100.0%` |
+| **2. Fixed Assignment & Rerun** (`fixed`) | `COMPLETED` | **3 Distinct Solutions** | Strictly locks `S02` $\rightarrow$ `P2` (`is_fixed=True`) across all 3 alternatives and supports interactive Lock & Rerun. |
+| **3. Capacity Deficit** (`infeasible`) | `INFEASIBLE` | `0` | Gracefully caught (`10 students > 6 seats`); persists run with diagnostic bottleneck explanation. |
+| **4. Contradictory Locks** (`conflicting`) | `INFEASIBLE` | `0` | Rejects 4 fixed locks on `P1` (`max_capacity=3`) with explicit capacity-exceeded diagnostic error. |
+
+---
+
+## 5. Implementation Documentation Index
+
+Detailed architectural rationale, data-flow walkthroughs, files changed, and verification logs for every implemented issue are maintained in [`docs/team_related/issues_solutions/`](../team_related/issues_solutions/):
+
+- **Team A Solutions:** [`A1.1`](../team_related/issues_solutions/A1.1_solution.md) · [`A1.2`](../team_related/issues_solutions/A1.2_solution.md) · [`A1.3`](../team_related/issues_solutions/A1.3_solution.md) · [`A1.4`](../team_related/issues_solutions/A1.4_solution.md) · [`A2.1`](../team_related/issues_solutions/A2.1_solution.md) · [`A2.2`](../team_related/issues_solutions/A2.2_solution.md) · [`A2.3`](../team_related/issues_solutions/A2.3_solution.md)
+- **Team B Solutions:** [`0.3`](../team_related/issues_solutions/0.3_solution.md) · [`B1.1`](../team_related/issues_solutions/B1.1_solution.md) · [`B1.2`](../team_related/issues_solutions/B1.2_solution.md) · [`B1.3`](../team_related/issues_solutions/B1.3_solution.md) · [`B2.1`](../team_related/issues_solutions/B2.1_solution.md) · [`B2.2`](../team_related/issues_solutions/B2.2_solution.md) · [`B2.3`](../team_related/issues_solutions/B2.3_solution.md) · [`B3.1`](../team_related/issues_solutions/B3.1_solution.md) · [`B3.2`](../team_related/issues_solutions/B3.2_solution.md) · [`B3.3`](../team_related/issues_solutions/B3.3_solution.md) · [`B3.4`](../team_related/issues_solutions/B3.4_solution.md)
