@@ -5,8 +5,11 @@ import pathlib
 import pytest
 
 from app import create_app
+from app.contract import contract
+from app.contract import mocks
 from app.domain import models
 from app.persistence import repositories
+from app.samples import demo_data
 
 
 def test_dashboard_loads(tmp_path: pathlib.Path) -> None:
@@ -839,3 +842,107 @@ def test_projects_edge_cases_and_full_layers(tmp_path: pathlib.Path) -> None:
         )
         == []
     )
+
+
+# -----------------------------------------------------------------------------
+# Issue A2.3 - "Lock and re-run" button works properly
+# -----------------------------------------------------------------------------
+
+
+def test_student_viewer_cannot_lock_and_rerun(tmp_path: pathlib.Path) -> None:
+    """Verifies that Student Viewer role cannot perform lock and re-run."""
+    db_file = tmp_path / "test_lock_denied.db"
+    app = create_app({"TESTING": True, "DATABASE_PATH": db_file})
+    client = app.test_client()
+
+    # 1. Seed standard scenario and trigger an initial run
+    client.post("/load-scenario/standard", follow_redirects=True)
+    engine = mocks.MockAssignmentEngine()
+    req = contract.RunRequest(
+        students=repositories.StudentRepository().list_all(),
+        projects=repositories.ProjectRepository().list_all(),
+        skills=repositories.SkillRepository().list_all(),
+        strategy_key="PREFERENCE",
+        max_alternatives=2,
+    )
+    run = engine.execute_run(req)
+    assert run.solutions
+    sol_id = run.solutions[0].id
+
+    # 2. Switch role to STUDENT
+    client.post("/set-role", data={"role": "STUDENT"}, follow_redirects=True)
+
+    # 3. Attempt lock and re-run
+    res = client.post(
+        f"/solutions/{sol_id}/lock-and-rerun",
+        data={"student_id": "S01", "project_id": "P1"},
+        follow_redirects=True,
+    )
+    assert res.status_code == 200
+    assert b"Permission denied for current role." in res.data
+
+    # 4. Verify no fixed assignment was created
+    fixed = repositories.FixedAssignmentRepository().list_all()
+    assert len(fixed) == 0
+
+    # 5. Verify no rerun was created
+    runs = repositories.RunRepository().list_runs()
+    assert len(runs) == 1
+
+
+def test_lock_and_rerun_creates_exactly_one_fixed_assignment_and_preserves_strategy(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Verifies locking creates exactly one lock, keeps strategy, and reports changes."""
+    db_file = tmp_path / "test_lock_rerun.db"
+    app = create_app({"TESTING": True, "DATABASE_PATH": db_file})
+    client = app.test_client()
+
+    # 1. Seed standard scenario and execute initial run with EGALITARIAN strategy
+    client.post("/load-scenario/standard", follow_redirects=True)
+    engine = mocks.MockAssignmentEngine()
+    req = contract.RunRequest(
+        students=repositories.StudentRepository().list_all(),
+        projects=repositories.ProjectRepository().list_all(),
+        skills=repositories.SkillRepository().list_all(),
+        strategy_key="EGALITARIAN",
+        max_alternatives=2,
+    )
+    run = engine.execute_run(req)
+    assert run.solutions
+    sol = run.solutions[0]
+    initial_assigned_proj = sol.assignments[0].project_id
+    target_student = sol.assignments[0].student_id
+
+    # Choose a different project to lock to
+    all_projects = repositories.ProjectRepository().list_all()
+    other_proj = next(
+        p.id for p in all_projects if p.id != initial_assigned_proj
+    )
+
+    # 2. As Admin or Coordinator, trigger lock and re-run
+    client.post(
+        "/set-role", data={"role": "COORDINATOR"}, follow_redirects=True
+    )
+    res = client.post(
+        f"/solutions/{sol.id}/lock-and-rerun",
+        data={"student_id": target_student, "project_id": other_proj},
+        follow_redirects=True,
+    )
+    assert res.status_code == 200
+
+    # 3. Assert exactly one fixed assignment exists
+    fixed_assignments = repositories.FixedAssignmentRepository().list_all()
+    assert len(fixed_assignments) == 1
+    assert fixed_assignments[0].student_id == target_student
+    assert fixed_assignments[0].project_id == other_proj
+
+    # 4. Assert strategy was preserved in the rerun
+    runs = repositories.RunRepository().list_runs()
+    assert len(runs) == 2
+    latest_run = runs[0]
+    assert latest_run.configuration.get("primary_strategy") == "EGALITARIAN"
+
+    # 5. Assert the flash message shows changed students count and link to /compare
+    assert b"students changed compared with the previous run" in res.data
+    assert b"/compare" in res.data
