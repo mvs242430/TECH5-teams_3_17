@@ -3,11 +3,13 @@
 {% block title %}Decision Recommendations - TECH5{% endblock %}
 
 {% block content %}
+{# ── Page header ─────────────────────────────────────────────────────────── #}
 <div style="margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
   <div>
     <h1 style="font-size: 1.6rem; font-weight: 700;">Transparent Decision Recommendations</h1>
     <p style="color: var(--text-muted); margin-top: 0.25rem;">
-      Run <code>{{ run.id[:8] }}</code> &bull; Rigorously distinguishing calculated mathematical <strong>Evidence</strong> from policy-oriented <strong>Advice</strong>.
+      Run <code>{{ run.id[:8] }}</code> &bull; Rigorously distinguishing calculated mathematical
+      <strong>Evidence</strong> from policy-oriented <strong>Advice</strong>.
     </p>
   </div>
   <a href="{{ url_for('visualization_web.view_run', run_id=run.id) }}" class="btn btn-sm btn-secondary">
@@ -16,66 +18,124 @@
 </div>
 
 {% if recommendations %}
+  <style>
+    .kpi-accent-1 { border-left: 4px solid var(--success); }
+    .kpi-accent-2 { border-left: 4px solid var(--primary); }
+    .kpi-accent-3 { border-left: 4px solid var(--secondary); }
+    .card-accent-1 { border-left: 5px solid var(--success); }
+    .card-accent-2 { border-left: 5px solid var(--primary); }
+    .card-accent-3 { border-left: 5px solid #475569; }
+  </style>
+
+  {# ── At-a-glance summary strip ─────────────────────────────────────────── #}
+  <div class="kpi-grid" style="margin-bottom: 2rem;">
+    {% for rec in recommendations %}
+      <a href="#rec-{{ loop.index }}"
+         class="kpi-card {% if loop.index == 1 %}kpi-accent-1{% elif loop.index == 2 %}kpi-accent-2{% else %}kpi-accent-3{% endif %}"
+         style="text-decoration: none;">
+        <span class="kpi-label">{{ rec.priority_focus }}</span>
+        <span class="kpi-value" style="font-size: 1.4rem;">Alt #{{ rec.recommended_alternative_number }}</span>
+        <span class="kpi-sub">
+          <a href="{{ url_for('visualization_web.view_solution', solution_id=rec.recommended_solution_id) }}"
+             style="color: var(--primary); font-weight: 600;">View solution &rarr;</a>
+        </span>
+      </a>
+    {% endfor %}
+  </div>
+
+  {# ── Per-recommendation cards ──────────────────────────────────────────── #}
   <div style="display: flex; flex-direction: column; gap: 1.5rem;">
     {% for rec in recommendations %}
-      <div class="card" style="margin-bottom: 0; border-left: 5px solid {% if loop.index == 1 %}var(--success){% elif loop.index == 2 %}var(--primary){% else %}#475569{% endif %};">
+      {% set next_rec = recommendations[(loop.index) % recommendations|length] %}
+      <div id="rec-{{ loop.index }}"
+           class="card {% if loop.index == 1 %}card-accent-1{% elif loop.index == 2 %}card-accent-2{% else %}card-accent-3{% endif %}"
+           style="margin-bottom: 0;">
+
+        {# Card header ─────────────────────────────────────────────────────── #}
         <div class="card-header">
           <div>
-            <span class="badge {% if loop.index == 1 %}badge-success{% elif loop.index == 2 %}badge-primary{% else %}badge-secondary{% endif %}" style="font-size: 0.85rem; margin-bottom: 0.25rem;">
+            <span class="badge {% if loop.index == 1 %}badge-success{% elif loop.index == 2 %}badge-primary{% else %}badge-secondary{% endif %}"
+                  style="font-size: 0.85rem; margin-bottom: 0.25rem;">
               {{ rec.priority_focus }}
             </span>
             <h2 class="card-title" style="margin-top: 0.25rem;">
               Recommended: Solution Alternative #{{ rec.recommended_alternative_number }}
             </h2>
           </div>
-          <a href="{{ url_for('visualization_web.view_solution', solution_id=rec.recommended_solution_id) }}" class="btn btn-sm btn-primary">
-            View Solution #{{ rec.recommended_alternative_number }} &rarr;
-          </a>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end;">
+            <a href="{{ url_for('visualization_web.view_solution', solution_id=rec.recommended_solution_id) }}"
+               class="btn btn-sm btn-primary">
+              View Solution #{{ rec.recommended_alternative_number }} &rarr;
+            </a>
+            {# Compare link: pre-fill this solution as A, the next recommendation's solution as B #}
+            {% if recommendations|length >= 2 %}
+              <a href="{{ url_for('visualization_web.compare_solutions',
+                                  sol1=rec.recommended_solution_id,
+                                  sol2=next_rec.recommended_solution_id) }}"
+                 class="btn btn-sm btn-secondary"
+                 title="Compare Alt #{{ rec.recommended_alternative_number }} vs Alt #{{ next_rec.recommended_alternative_number }}">
+                &#9654; Compare vs Alt #{{ next_rec.recommended_alternative_number }}
+              </a>
+            {% endif %}
+          </div>
         </div>
 
         <div class="card-body">
           <div class="grid-2">
-            <!-- Evidence Column -->
-            <div style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.25rem;">
-              <h3 style="font-size: 0.95rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--primary); margin-bottom: 0.6rem;">
-                &#128202; Calculated Evidence (Objective Facts)
-              </h3>
-              <ul style="margin-left: 1.25rem; font-size: 0.92rem; color: #334155;">
-                {% for ev in rec.evidence %}
-                  <li style="margin-bottom: 0.35rem;">{{ ev }}</li>
-                {% endfor %}
-              </ul>
 
-              <div style="margin-top: 1rem; padding-top: 0.75rem; border-top: 1px dashed var(--border-color);">
-                <strong style="font-size: 0.82rem; color: var(--text-muted);">Criteria Evaluated:</strong>
-                <ul style="margin-left: 1.25rem; font-size: 0.82rem; color: var(--text-muted); margin-top: 0.25rem;">
+            {# ── Evidence box (alert-info = blue, objective facts) ─────────── #}
+            <div>
+              <div class="alert alert-info" style="align-items: flex-start; flex-direction: column; gap: 0.5rem;">
+                <h3 style="font-size: 0.95rem; font-weight: 700; text-transform: uppercase;
+                           letter-spacing: 0.05em; margin-bottom: 0.4rem;">
+                  &#128202; Calculated Evidence (Objective Facts)
+                </h3>
+                <ul style="margin-left: 1.25rem; font-size: 0.92rem;">
+                  {% for ev in rec.evidence %}
+                    <li style="margin-bottom: 0.3rem;">{{ ev }}</li>
+                  {% endfor %}
+                </ul>
+              </div>
+
+              {# ── Why this one? (criteria_used) ─────────────────────────── #}
+              <div style="background: var(--secondary-light); border: 1px solid var(--border-color);
+                          border-radius: var(--radius-md); padding: 1rem; margin-top: 0.75rem;">
+                <h4 class="kpi-label" style="margin-bottom: 0.5rem;">Why this one?</h4>
+                <ul style="margin-left: 1.25rem; font-size: 0.85rem; color: var(--text-muted);">
                   {% for c in rec.criteria_used %}
-                    <li>{{ c }}</li>
+                    <li style="margin-bottom: 0.25rem;">{{ c }}</li>
                   {% endfor %}
                 </ul>
               </div>
             </div>
 
-            <!-- Advice Column -->
-            <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.25rem; display: flex; flex-direction: column; justify-content: space-between;">
-              <div>
-                <h3 style="font-size: 0.95rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--success); margin-bottom: 0.6rem;">
-                  &#128161; Policy Advice & Justification
+            {# ── Advice box (alert-success = green, policy / normative) ───── #}
+            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+              <div class="alert alert-success" style="align-items: flex-start; flex-direction: column; gap: 0.4rem; flex: 1;">
+                <h3 style="font-size: 0.95rem; font-weight: 700; text-transform: uppercase;
+                           letter-spacing: 0.05em; margin-bottom: 0.4rem;">
+                  &#128161; Policy Advice &amp; Justification
                 </h3>
-                <p style="font-size: 0.95rem; line-height: 1.6; color: var(--text-main);">
+                <p style="font-size: 0.95rem; line-height: 1.6;">
                   {{ rec.advice }}
                 </p>
               </div>
 
-              <div style="margin-top: 1rem; background: var(--secondary-light); border-radius: var(--radius-sm); padding: 0.75rem; font-size: 0.82rem; color: var(--secondary);">
-                <strong>Governance Note:</strong> Final allocation decisions rest with the programme committee. If stakeholder priorities emphasize this focus, Solution {{ rec.recommended_alternative_number }} represents the mathematically optimal selection.
+              <div style="background: var(--secondary-light); border: 1px solid var(--border-color);
+                          border-radius: var(--radius-md); padding: 0.75rem;
+                          font-size: 0.82rem; color: var(--secondary);">
+                <strong>Governance Note:</strong> Final allocation decisions rest with the programme
+                committee. If stakeholder priorities emphasize this focus, Solution
+                {{ rec.recommended_alternative_number }} represents the mathematically optimal selection.
               </div>
             </div>
-          </div>
-        </div>
-      </div>
+
+          </div>{# /grid-2 #}
+        </div>{# /card-body #}
+      </div>{# /card #}
     {% endfor %}
   </div>
+
 {% else %}
   <div class="card">
     <div class="card-body" style="text-align: center; padding: 3rem 0;">
