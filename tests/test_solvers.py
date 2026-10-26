@@ -5,6 +5,7 @@ import pytest
 from app.contract import contract
 from app.domain import models
 from app.engine import solvers
+from app.engine import strategies
 from app.samples import demo_data
 
 
@@ -33,6 +34,32 @@ def test_assignment_engine_raises_not_implemented() -> None:
     with pytest.raises(NotImplementedError) as exc_info:
         engine.execute_run(request)
     assert "TODO (Team B)" in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "strategy",
+    [
+        strategies.PreferenceOrientedSolver(),
+        strategies.SkillFitOrientedSolver(),
+        strategies.BalancedTradeoffSolver(),
+    ],
+)
+def test_strategies_solve_standard_scenario(
+    strategy: solvers.AssignmentStrategy,
+) -> None:
+    benchmark = demo_data.get_standard_scenario()
+
+    status, assignments, objective, diagnostics = strategy.solve(
+        benchmark["students"],
+        benchmark["projects"],
+        benchmark["fixed_assignments"],
+    )
+
+    assert status == "OPTIMAL"
+    assert objective is not None
+    assert len(assignments) == len(benchmark["students"])
+    assert diagnostics["solver"] == "appsi_highs"
+    assert all(assignment.preference_rank is not None for assignment in assignments)
 
 
 @pytest.mark.xfail(
