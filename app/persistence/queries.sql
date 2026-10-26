@@ -107,3 +107,52 @@ LEFT JOIN solutions s ON r.id = s.run_id
 GROUP BY r.id, r.created_at, r.status, r.configuration
 ORDER BY r.created_at DESC
 LIMIT 25;
+
+
+-- 7. Students Assigned to a Project They Did Not Rank (Anti-join)
+-- Lists allocations with no matching row in the student's own preference
+-- list, e.g. students placed by a fixed lock or by capacity pressure.
+-- Checked against the preferences table itself, so it does not rely on
+-- the engine filling in preference_rank correctly.
+SELECT
+    s.id AS student_id,
+    s.display_name AS student_name,
+    a.project_id AS assigned_project_id,
+    p.title AS assigned_project_title,
+    a.is_fixed,
+    (SELECT COUNT(*) FROM preferences x WHERE x.student_id = s.id)
+        AS projects_ranked_by_student
+FROM assignments a
+JOIN students s ON a.student_id = s.id
+JOIN projects p ON a.project_id = p.id
+LEFT JOIN preferences pr
+    ON pr.student_id = a.student_id AND pr.project_id = a.project_id
+WHERE a.solution_id = :solution_id
+  AND pr.project_id IS NULL
+ORDER BY a.is_fixed DESC, s.id ASC;
+
+
+-- 8. Project Demand vs. Supply Before Optimisation (Aggregation on Input Data)
+-- Shows how popular each project is compared with its seats, so the
+-- coordinator can spot over-subscribed projects before running the engine.
+SELECT
+    p.id AS project_id,
+    p.title AS project_title,
+    p.max_capacity,
+    SUM(CASE WHEN pr.rank = 1 THEN 1 ELSE 0 END) AS first_choice_count,
+    COUNT(pr.student_id) AS times_ranked,
+    ROUND(AVG(pr.rank), 2) AS average_rank,
+    ROUND(
+        SUM(CASE WHEN pr.rank = 1 THEN 1 ELSE 0 END) * 1.0 / p.max_capacity,
+        2
+    ) AS first_choice_per_seat,
+    CASE
+        WHEN SUM(CASE WHEN pr.rank = 1 THEN 1 ELSE 0 END) > p.max_capacity
+            THEN 'OVERSUBSCRIBED'
+        WHEN COUNT(pr.student_id) = 0 THEN 'NOT_RANKED'
+        ELSE 'OK'
+    END AS demand_status
+FROM projects p
+LEFT JOIN preferences pr ON pr.project_id = p.id
+GROUP BY p.id, p.title, p.max_capacity
+ORDER BY first_choice_per_seat DESC, times_ranked DESC;
