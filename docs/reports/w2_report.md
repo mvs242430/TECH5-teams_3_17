@@ -53,3 +53,63 @@ During Week 2, the team transitioned to feature implementation on dedicated bran
 | **Referential Integrity** | Pre-delete dependency check across students & projects | Before deleting a skill, `delete_skill` queries `StudentRepository` and `ProjectRepository`. If any student possesses the skill or any project requires it, deletion is blocked with an informative flash alert (e.g. *"Cannot delete skill: still referenced by 2 student(s) and 1 project(s)"*), preventing accidental data corruption. |
 | **Confirmation UX** | Custom In-App Modal Dialog | Rather than relying on browser-native `window.confirm()` popups (which look generic and vary across operating systems), an in-app CSS/JS modal was built directly into `skills.html`. It displays the skill name in brackets, an amber warning badge, a `Cancel` button, and a `Yes, Delete` danger button. |
 | **Navigation State** | Client-side DOM class binding (`active`) | Added DOM initialization that adds `.active` (`color: #38bdf8`) to the Skills navigation tab on page load, providing clear visual orientation within the DSS navbar. |
+
+
+## 1. Executive Summary & Status
+
+During Week 2, I worked on **B1 — analytical metrics and solution comparison** in `app/engine/metrics.py`. The purpose was to replace mock analytical results with real metrics that can be used by the assignment engine and Team A's user interface.
+
+### Status at a Glance
+
+- **B1.1:** Skill-fit score and Gini coefficient implemented.
+- **B1.2:** Solution indicators for feasibility, efficiency, fairness, and capacity implemented.
+- **B1.3:** Comparison of two alternative solutions implemented.
+- **Main files:** `app/engine/metrics.py`, `tests/test_metrics.py`
+- **Verification:** The implemented B1 metric tests pass locally. Final full-suite pytest output should be recorded before submission.
+
+---
+
+## 2. Technical Decisions & Implementation Rationale
+
+### 2.1 Analytical Structure
+
+The analytical calculations were kept inside **Component B (`app/engine`)** so that the assignment engine remains independent of Flask and the visualization layer. The functions return structured dictionaries that can be consumed by Team A without requiring UI-specific logic inside the engine.
+
+The solution indicators were divided into four categories:
+
+- **Feasibility:** checks whether assignment rules and constraints are respected.
+- **Efficiency:** measures student-project skill fit and unmet optional requirements.
+- **Fairness:** evaluates preference ranks and inequality of assignment outcomes.
+- **Capacity:** measures project utilisation.
+
+---
+
+### 2.2 Key Design Decisions
+
+| Decision Area | Chosen Approach | Rationale |
+| :--- | :--- | :--- |
+| **Skill-fit scoring** | Each requirement is scored as `min(student level / required level, 1.0)` and the scores are averaged. | Creates a comparable score between 0 and 1 while preventing overqualification from increasing the score above full satisfaction. |
+| **Edge cases in skill fit** | Projects without requirements receive a score of `1.0`; zero-level requirements are handled without division by zero. | Makes the metric robust for valid edge cases. |
+| **Gini fairness measure** | Gini is calculated from pairwise absolute differences; empty/all-zero inputs return `0.0`, while negative inputs are rejected. | Provides a reusable measure of inequality while avoiding invalid calculations. |
+| **Unranked assignments** | Unranked assignments are excluded from `mean_rank`, counted separately, and treated as one rank worse than the worst stated preference when calculating fairness comparisons. | Prevents unranked assignments from making the average rank look artificially better while still reflecting their negative fairness effect. |
+| **Feasibility separated from quality** | Constraint violations are reported independently from efficiency and fairness metrics. | A solution can be identified as infeasible rather than simply appearing to have poor analytical scores. |
+| **Stable indicator structure** | Fixed key names are returned for feasibility, efficiency, fairness, and capacity. | Team A and the recommendation logic read these values directly, so consistent names are necessary for integration. |
+| **Solution comparison** | Changes are calculated consistently as **Solution B − Solution A**, including skill fit, mean rank, unranked assignments, and Gini. | Gives all comparison values a consistent interpretation. |
+| **Changed assignments** | Only students assigned to a different project in the two solutions are included in the detailed comparison. | Keeps the comparison focused on meaningful allocation changes. |
+| **Rounding** | Comparison deltas are rounded to four decimal places. | Avoids floating-point artefacts and gives stable values for tests and presentation. |
+| **Trade-off summaries** | Numerical comparison results are also converted into short human-readable statements. | Makes the DSS easier to interpret for users who do not want to evaluate raw metrics alone. |
+
+---
+
+## 3. Verification & Documentation
+
+The implementation was verified using `pytest`, with the B1 tests activated after the corresponding functions were implemented.
+
+```bash
+python -m pytest tests/test_metrics.py -q
+python -m pytest -q
+```
+
+The B1 implementation is also documented according to the repository's solution-documentation rules, describing the main analytical decisions, data flow, modified files, and verification results.
+
+The main integration objective is that real solutions generated by Team B can be evaluated in `metrics.py` and passed in a predictable structure to Team A's comparison and recommendation views without relying on mock analytical data.
