@@ -5,6 +5,7 @@ import pytest
 from app.contract import contract
 from app.domain import models
 from app.engine import solvers
+from app.engine import strategies
 from app.samples import demo_data
 
 
@@ -68,3 +69,43 @@ def test_distinct_alternatives_generation() -> None:
             assert (
                 pairs_i != pairs_j
             ), f"Solution {i+1} and {j+1} are duplicate allocations!"
+
+
+def test_strategy_excludes_previous_solution() -> None:
+    """A no-good cut makes the next standard-scenario assignment differ."""
+    benchmark = demo_data.get_standard_scenario()
+    strategy = strategies.PreferenceOrientedSolver()
+
+    status, assignments, _, _ = strategy.solve(
+        benchmark["students"], benchmark["projects"]
+    )
+    first_pairs = [(a.student_id, a.project_id) for a in assignments]
+    alternative_status, alternative, _, _ = strategy.solve(
+        benchmark["students"],
+        benchmark["projects"],
+        excluded_solutions=[first_pairs],
+    )
+
+    assert status == "OPTIMAL"
+    assert alternative_status == "OPTIMAL"
+    assert first_pairs != [(a.student_id, a.project_id) for a in alternative]
+
+
+def test_strategy_reports_infeasible_when_only_solution_is_excluded() -> None:
+    """Excluding the sole valid assignment reports infeasibility."""
+    students = [models.Student(id="S1", display_name="One")]
+    projects = [
+        models.Project(id="P1", title="Only", min_capacity=1, max_capacity=1)
+    ]
+    strategy = strategies.PreferenceOrientedSolver()
+
+    status, assignments, _, _ = strategy.solve(students, projects)
+    pairs = [(a.student_id, a.project_id) for a in assignments]
+    alternative_status, alternative, objective, _ = strategy.solve(
+        students, projects, excluded_solutions=[pairs]
+    )
+
+    assert status == "OPTIMAL"
+    assert alternative_status == "INFEASIBLE"
+    assert alternative == []
+    assert objective is None
