@@ -113,6 +113,32 @@ def test_base_model_forbids_students_below_mandatory_skill() -> None:
     assert pyo.value(variables["S2", "P1"]) == 1
 
 
+@pytest.mark.parametrize(
+    "strategy",
+    [
+        strategies.PreferenceOrientedSolver(),
+        strategies.SkillFitOrientedSolver(),
+        strategies.BalancedTradeoffSolver(),
+    ],
+)
+def test_strategies_solve_standard_scenario(
+    strategy: solvers.AssignmentStrategy,
+) -> None:
+    benchmark = demo_data.get_standard_scenario()
+
+    status, assignments, objective, diagnostics = strategy.solve(
+        benchmark["students"],
+        benchmark["projects"],
+        benchmark["fixed_assignments"],
+    )
+
+    assert status == "OPTIMAL"
+    assert objective is not None
+    assert len(assignments) == len(benchmark["students"])
+    assert diagnostics["solver"] == "appsi_highs"
+    assert all(assignment.preference_rank is not None for assignment in assignments)
+
+
 @pytest.mark.xfail(
     raises=NotImplementedError,
     reason="TODO (Team B): Implement optimization solver and alternative generation",
