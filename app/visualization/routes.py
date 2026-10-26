@@ -905,11 +905,77 @@ def clear_solutions() -> flask.Response:
 def compare_solutions() -> Any:
     """Renders side-by-side comparative analysis of two solutions.
 
-    Raises:
-        NotImplementedError: To be implemented by Team A.
+    Reads ``sol1`` and ``sol2`` query parameters. With no IDs the page shows
+    only the selector dropdowns.  With an unrecognised ID a ``danger`` flash
+    message is issued and the user is redirected back to the empty selector.
+    With two valid IDs the comparison is fetched from
+    ``AssignmentEngine.compare_solutions``; if that raises
+    ``NotImplementedError`` the ``MockAssignmentEngine`` is used instead
+    (mirroring the fallback pattern in ``trigger_run``).
+
+    Returns:
+        Rendered ``compare.html`` with ``sol_a``, ``sol_b``, ``comparison``,
+        and ``all_solutions`` context variables.
     """
-    raise NotImplementedError(
-        "TODO (Team A): Implement side-by-side solution comparison controller"
+    # Build the flat list of all solutions across recent runs for the dropdowns.
+    run_repo = repositories.RunRepository()
+    recent_runs = run_repo.list_runs(limit=50)
+    all_solutions: list[models.Solution] = [
+        sol for run in recent_runs for sol in run.solutions
+    ]
+
+    # Read the two requested solution IDs from the query string.
+    sol1_id = flask.request.args.get("sol1", "").strip()
+    sol2_id = flask.request.args.get("sol2", "").strip()
+
+    # No IDs supplied — render the selector only (no comparison panel).
+    if not sol1_id or not sol2_id:
+        return flask.render_template(
+            "compare.html",
+            sol_a=None,
+            sol_b=None,
+            comparison=None,
+            all_solutions=all_solutions,
+        )
+
+    # Resolve solution objects; redirect on unknown ID.
+    sol_a = run_repo.get_solution(sol1_id)
+    if not sol_a:
+        flask.flash(
+            f"Solution '{sol1_id}' not found. Please select a valid solution.",
+            "danger",
+        )
+        return flask.redirect(flask.url_for("visualization_web.compare_solutions"))
+
+    sol_b = run_repo.get_solution(sol2_id)
+    if not sol_b:
+        flask.flash(
+            f"Solution '{sol2_id}' not found. Please select a valid solution.",
+            "danger",
+        )
+        return flask.redirect(flask.url_for("visualization_web.compare_solutions"))
+
+    # Delegate comparison to the engine; fall back to the mock on
+    # NotImplementedError (same pattern as trigger_run / lock_and_rerun).
+    engine: contract.AssignmentEngineContract = solvers.AssignmentEngine()
+    try:
+        comparison = engine.compare_solutions(sol1_id, sol2_id)
+    except NotImplementedError:
+        flask.flash(
+            "Notice: AssignmentEngine.compare_solutions() is not yet implemented "
+            "by Team B. Running with MockAssignmentEngine for demonstration.",
+            "info",
+        )
+        comparison = mocks.MockAssignmentEngine().compare_solutions(
+            sol1_id, sol2_id
+        )
+
+    return flask.render_template(
+        "compare.html",
+        sol_a=sol_a,
+        sol_b=sol_b,
+        comparison=comparison,
+        all_solutions=all_solutions,
     )
 
 

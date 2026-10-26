@@ -291,14 +291,62 @@ def test_projects_crud_workflow(tmp_path: pathlib.Path) -> None:
     )
 
 
-@pytest.mark.xfail(
-    raises=NotImplementedError,
-    reason="TODO (Team A): Implement comparison controller & view",
-)
+
 def test_compare_solutions_view(tmp_path: pathlib.Path) -> None:
-    """Verifies solution comparison controller (Team A implementation)."""
+    """Verifies solution comparison controller (Team A implementation).
+
+    Arrange: Seed a mock run with at least two solutions via
+    MockAssignmentEngine so that real solution UUIDs are available in the
+    test-isolated database.
+
+    Act (happy path): GET /compare?sol1=<id>&sol2=<id> with both known IDs.
+    Assert: HTTP 200 and the KPI card sentinel text 'Changed Student
+    Allocations'.
+
+    Act (unknown ID): GET /compare?sol1=bad-id&sol2=bad-id.
+    Assert: HTTP 302 redirect, never an error page.
+    """
+    from app.contract import mocks as contract_mocks
+    from app.contract import contract
+
     db_file = tmp_path / "test_comp.db"
     app = create_app({"TESTING": True, "DATABASE_PATH": db_file})
     client = app.test_client()
 
-    client.get("/compare?sol1=S1&sol2=S2")
+    # --- Arrange: seed a mock run with two solutions in the test DB. ---
+    with app.app_context():
+        # Build a minimal cohort so MockAssignmentEngine generates ≥ 2 solutions.
+        students = [
+            models.Student(id="S1", display_name="Alice"),
+            models.Student(id="S2", display_name="Bob"),
+        ]
+        projects = [
+            models.Project(id="P1", title="Alpha", min_capacity=1, max_capacity=2),
+            models.Project(id="P2", title="Beta", min_capacity=1, max_capacity=2),
+        ]
+        req = contract.RunRequest(
+            students=students,
+            projects=projects,
+            skills=[],
+            fixed_assignments=[],
+            strategy_key="PREFERENCE",
+            max_alternatives=2,
+        )
+        run = contract_mocks.MockAssignmentEngine().execute_run(req)
+
+    # We need at least two distinct solutions to compare.
+    assert len(run.solutions) >= 2, (
+        "MockAssignmentEngine must return at least 2 solutions for this test"
+    )
+    sol1_id = run.solutions[0].id
+    sol2_id = run.solutions[1].id
+
+    # --- Act (happy path): valid comparison. ---
+    res = client.get(f"/compare?sol1={sol1_id}&sol2={sol2_id}")
+    assert res.status_code == 200
+    assert b"Changed Student Allocations" in res.data
+
+    # --- Act (unknown IDs): must redirect, never raise a 500. ---
+    bad_res = client.get("/compare?sol1=bad-id&sol2=bad-id")
+    assert bad_res.status_code == 302
+
