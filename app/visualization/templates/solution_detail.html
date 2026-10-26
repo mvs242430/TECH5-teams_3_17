@@ -3,6 +3,12 @@
 {% block title %}Solution #{{ solution.alternative_number }} Details - TECH5{% endblock %}
 
 {% block content %}
+<style>
+  .fit-bar-high { background: var(--success); }
+  .fit-bar-mid { background: #3b82f6; }
+  .fit-bar-low { background: var(--warning); }
+  .util-bar { background: var(--primary); }
+</style>
 <div style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
   <a href="{{ url_for('visualization_web.view_run', run_id=solution.run_id) }}" class="btn btn-sm btn-secondary">
     &larr; Back to Run Overview
@@ -72,7 +78,7 @@
             <th>Preference Rank</th>
             <th>Skill Fit Match</th>
             <th>Status / Unmet Skills</th>
-            {% if can_edit %}<th>Interactive Rerun</th>{% endif %}
+            {% if can_optimize %}<th>Interactive Rerun</th>{% endif %}
           </tr>
         </thead>
         <tbody>
@@ -106,7 +112,9 @@
               <td style="width: 170px;">
                 <div style="display: flex; align-items: center; gap: 0.5rem;">
                   <div style="flex: 1; background: #e2e8f0; height: 8px; border-radius: 4px; overflow: hidden;">
-                    <div style="background: {% if asg.skill_fit_score >= 0.8 %}var(--success){% elif asg.skill_fit_score >= 0.5 %}#3b82f6{% else %}var(--warning){% endif %}; width: {{ (asg.skill_fit_score * 100)|round }}%; height: 100%;"></div>
+                    {% set fit_cls = 'fit-bar-high' if asg.skill_fit_score >= 0.8 else ('fit-bar-mid' if asg.skill_fit_score >= 0.5 else 'fit-bar-low') %}
+                    {% set fit_pct = (asg.skill_fit_score * 100)|round|int %}
+                    <div class="{{ fit_cls }}" {{ ('style="width: ' ~ fit_pct ~ '%; height: 100%;"')|safe }}></div>
                   </div>
                   <span style="font-weight: 600; font-size: 0.85rem;">{{ (asg.skill_fit_score * 100)|round }}%</span>
                 </div>
@@ -123,14 +131,14 @@
                   <span style="color: var(--success); font-size: 0.85rem;">&#10003; Full Fit</span>
                 {% endif %}
               </td>
-              {% if can_edit %}
+              {% if can_optimize %}
                 <td>
                   {% if not asg.is_fixed %}
-                    <form action="{{ url_for('visualization_web.lock_and_rerun', solution_id=solution.id) }}" method="POST" onsubmit="return confirm('Lock student {{ asg.student_id }} to project {{ asg.project_id }} and run optimization again?');">
+                    <form action="{{ url_for('visualization_web.lock_and_rerun', solution_id=solution.id) }}" method="POST" onsubmit="return confirm('Are you sure you want to lock student {{ asg.student_id }} to project {{ asg.project_id }} and re-run optimization?');">
                       <input type="hidden" name="student_id" value="{{ asg.student_id }}">
                       <input type="hidden" name="project_id" value="{{ asg.project_id }}">
                       <button type="submit" class="btn btn-sm btn-secondary" title="Lock this pair and trigger rerun">
-                        &#128274; Lock & Rerun
+                        &#128274; Lock &amp; Rerun
                       </button>
                     </form>
                   {% else %}
@@ -161,7 +169,7 @@
             <span>{{ p_info.assigned_count }} / {{ p_info.max_capacity }}</span>
           </div>
           <div style="background: #e2e8f0; height: 6px; border-radius: 3px; margin: 0.5rem 0; overflow: hidden;">
-            <div style="background: var(--primary); width: {{ p_info.utilization_pct }}%; height: 100%;"></div>
+            <div class="util-bar" {{ ('style="width: ' ~ p_info.utilization_pct ~ '%; height: 100%;"')|safe }}></div>
           </div>
           <div style="font-size: 0.8rem; color: var(--text-muted); display: flex; justify-content: space-between;">
             <span>Min: {{ p_info.min_capacity }}</span>

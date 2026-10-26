@@ -12,6 +12,7 @@ import sqlite3
 from typing import Any
 
 import flask
+import markupsafe
 
 from app.contract import contract
 from app.contract import mocks
@@ -1246,6 +1247,10 @@ def view_solution(solution_id: str) -> Any:
 @web_bp.post("/solutions/<solution_id>/lock-and-rerun")
 def lock_and_rerun(solution_id: str) -> flask.Response:
     """Locks a student assignment from a solution and triggers a new run."""
+    if not auth.can_trigger_optimization():
+        flask.flash("Permission denied for current role.", "danger")
+        return flask.redirect(flask.url_for("visualization_web.dashboard"))
+
     student_id = flask.request.form.get("student_id")
     project_id = flask.request.form.get("project_id")
 
@@ -1255,6 +1260,26 @@ def lock_and_rerun(solution_id: str) -> flask.Response:
             flask.url_for(
                 "visualization_web.view_solution", solution_id=solution_id
             )
+        )
+
+    repo = repositories.RunRepository()
+    original_solution = repo.get_solution(solution_id)
+    if not original_solution:
+        flask.flash(f"Solution '{solution_id}' not found.", "danger")
+        return flask.redirect(flask.url_for("visualization_web.dashboard"))
+
+    original_run = repo.get_run(original_solution.run_id)
+    strategy_key = "PREFERENCE"
+    max_alternatives = 3
+    if original_run and original_run.configuration:
+        strategy_key = (
+            original_run.configuration.get("primary_strategy")
+            or original_run.configuration.get("strategy_key")
+            or original_run.configuration.get("strategy")
+            or "PREFERENCE"
+        )
+        max_alternatives = int(
+            original_run.configuration.get("max_alternatives", 3)
         )
 
     # Persist as fixed assignment
@@ -1280,17 +1305,77 @@ def lock_and_rerun(solution_id: str) -> flask.Response:
         projects=projects,
         skills=skills,
         fixed_assignments=fixed,
+        strategy_key=strategy_key,
+        max_alternatives=max_alternatives,
+        notes=f"Re-run after locking student {student_id} to project {project_id}.",
     )
+    val_outcome = engine.validate_inputs(req)
+    for warning_msg in val_outcome.warnings:
+        flask.flash(f"Warning: {warning_msg}", "warning")
+
     try:
         new_run = engine.execute_run(req)
     except NotImplementedError:
         new_run = mocks.MockAssignmentEngine().execute_run(req)
 
+    # Calculate student allocation shift compared with previous solution
+    changed_count = 0
+    new_solution_id: str | None = None
+    if new_run.solutions:
+        new_solution = new_run.solutions[0]
+        new_solution_id = new_solution.id
+        try:
+            comparison = engine.compare_solutions(solution_id, new_solution.id)
+            changed_count = comparison.changed_students_count
+        except (NotImplementedError, Exception):
+            try:
+                comparison = mocks.MockAssignmentEngine().compare_solutions(
+                    solution_id, new_solution.id
+                )
+                changed_count = comparison.changed_students_count
+            except Exception:
+                orig_map = {
+                    a.student_id: a.project_id
+                    for a in original_solution.assignments
+                }
+                new_map = {
+                    a.student_id: a.project_id
+                    for a in new_solution.assignments
+                }
+                changed_count = sum(
+                    1
+                    for s_id, p_id in new_map.items()
+                    if orig_map.get(s_id) != p_id
+                )
+
+    compare_url = (
+        flask.url_for(
+            "visualization_web.compare_solutions",
+            sol1=solution_id,
+            sol2=new_solution_id,
+        )
+        if new_solution_id
+        else flask.url_for("visualization_web.compare_solutions")
+    )
+    compare_link_html = (
+        f'<a href="{compare_url}" style="color: inherit; text-decoration: '
+        f'underline; font-weight: 600; margin-left: 0.5rem;">'
+        f"Compare with previous run &rarr;</a>"
+    )
     flask.flash(
-        f"Student {student_id} locked to Project {project_id}. "
-        "New run generated!",
+        markupsafe.Markup(
+            f"Student {student_id} locked to Project {project_id}. "
+            f"{changed_count} students changed compared with the previous run."
+            f" {compare_link_html}"
+        ),
         "success",
     )
+    if new_run.status == "INFEASIBLE":
+        flask.flash(
+            "Solver could not find a feasible solution with this lock.",
+            "warning",
+        )
+
     return flask.redirect(
         flask.url_for("visualization_web.view_run", run_id=new_run.id)
     )
