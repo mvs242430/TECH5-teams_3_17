@@ -14,8 +14,8 @@
       <div class="grid-2">
         <div class="form-group">
           <label class="form-label" for="id">Student ID / Anonymous Identifier:</label>
-          <input type="text" id="id" name="id" class="form-control" value="{{ student.id if student else '' }}" required {% if student %}readonly style="background: #f1f5f9;"{% endif %} placeholder="e.g. S11">
-          <span class="form-hint">Unique identifier for cohort tracking.</span>
+          <input type="text" id="id" name="id" class="form-control" value="{{ student.id if student else '' }}" required {% if student %}readonly style="background: #f1f5f9;"{% endif %} maxlength="20" placeholder="e.g. S11">
+          <span class="form-hint">Unique ID: letters, digits, _ or -, max 20 characters.</span>
         </div>
 
         <div class="form-group">

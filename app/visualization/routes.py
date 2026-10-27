@@ -25,6 +25,16 @@ from app.visualization import auth
 
 web_bp = flask.Blueprint("visualization_web", __name__)
 
+# Input rules for IDs and project size (A1 follow-up to review feedback).
+# IDs: letters, digits, "_" or "-", 1-20 characters (e.g. P5, S11, P_DATA-2).
+ID_PATTERN = r"[A-Za-z0-9_-]{1,20}"
+ID_RULE_TEXT = (
+    "may only contain letters, digits, '_' or '-' and be at most 20 "
+    "characters long"
+)
+# Upper bound on seats per project, so typos like 1000 are caught early.
+MAX_PROJECT_SEATS = 50
+
 
 @web_bp.app_context_processor
 def inject_template_globals() -> dict[str, Any]:
@@ -338,6 +348,12 @@ def create_student() -> flask.Response:
             flask.url_for("visualization_web.new_student_form")
         )
 
+    if not re.fullmatch(ID_PATTERN, s_id):
+        flask.flash(f"Student ID '{s_id}' {ID_RULE_TEXT}.", "danger")
+        return flask.redirect(
+            flask.url_for("visualization_web.new_student_form")
+        )
+
     if not _check_valid_student_data(s_id, name, available_students):
         flask.flash(
             f"Student ID '{s_id}' or name '{name}' already exists.", "danger"
@@ -619,6 +635,15 @@ def _parse_and_validate_project_form(
             "Maximum capacity must be at least 1 seat.",
         )
 
+    if max_capacity > MAX_PROJECT_SEATS:
+        return (
+            None,
+            form_data,
+            req_levels,
+            req_mands,
+            f"Capacities cannot exceed {MAX_PROJECT_SEATS} seats per project.",
+        )
+
     if skill_errors:
         return (
             None,
@@ -673,6 +698,22 @@ def create_project() -> flask.Response:
         flask.flash("Project ID cannot be empty.", "danger")
         _, form_data, req_levels, req_mands, _ = (
             _parse_and_validate_project_form("", skills)
+        )
+        return flask.make_response(
+            flask.render_template(
+                "project_form.html",
+                project=None,
+                skills=skills,
+                form_data=form_data,
+                req_levels=req_levels,
+                req_mands=req_mands,
+            )
+        )
+
+    if not re.fullmatch(ID_PATTERN, project_id):
+        flask.flash(f"Project ID '{project_id}' {ID_RULE_TEXT}.", "danger")
+        _, form_data, req_levels, req_mands, _ = (
+            _parse_and_validate_project_form(project_id, skills)
         )
         return flask.make_response(
             flask.render_template(

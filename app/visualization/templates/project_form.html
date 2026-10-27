@@ -14,8 +14,8 @@
       <div class="grid-2">
         <div class="form-group">
           <label class="form-label" for="id">Project Identifier:</label>
-          <input type="text" id="id" name="id" class="form-control" value="{{ form_data.id if form_data else (project.id if project else '') }}" required {% if project %}readonly style="background: #f1f5f9;"{% endif %} placeholder="e.g. P5">
-          <span class="form-hint">Unique short code for the project.</span>
+          <input type="text" id="id" name="id" class="form-control" value="{{ form_data.id if form_data else (project.id if project else '') }}" required {% if project %}readonly style="background: #f1f5f9;"{% endif %} maxlength="20" placeholder="e.g. P5">
+          <span class="form-hint">Unique short code: letters, digits, _ or -, max 20 characters.</span>
         </div>
 
         <div class="form-group">
@@ -32,13 +32,13 @@
       <div class="grid-2">
         <div class="form-group">
           <label class="form-label" for="min_capacity">Minimum Capacity (Threshold):</label>
-          <input type="number" id="min_capacity" name="min_capacity" min="0" class="form-control" value="{{ form_data.min_capacity if form_data else (project.min_capacity if project else 0) }}">
+          <input type="number" id="min_capacity" name="min_capacity" min="0" max="50" class="form-control" value="{{ form_data.min_capacity if form_data else (project.min_capacity if project else 0) }}">
           <span class="form-hint">Minimum students needed for project viability.</span>
         </div>
 
         <div class="form-group">
           <label class="form-label" for="max_capacity">Maximum Capacity Limit:</label>
-          <input type="number" id="max_capacity" name="max_capacity" min="1" class="form-control" value="{{ form_data.max_capacity if form_data else (project.max_capacity if project else 3) }}" required>
+          <input type="number" id="max_capacity" name="max_capacity" min="1" max="50" class="form-control" value="{{ form_data.max_capacity if form_data else (project.max_capacity if project else 3) }}" required>
           <span class="form-hint">Maximum students that can be accommodated.</span>
         </div>
       </div>
