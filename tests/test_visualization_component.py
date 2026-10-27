@@ -998,3 +998,62 @@ def test_lock_and_rerun_creates_exactly_one_fixed_assignment_and_preserves_strat
     assert b"students changed compared with the previous run" in res.data
     assert b"/compare" in res.data
 
+
+
+# -----------------------------------------------------------------------------
+# A1 follow-up - ID format and project size limits (review feedback)
+# -----------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("bad_id", ["P 1", "P1!", "Ä1", "P" * 21])
+def test_project_id_with_invalid_format_shows_message(
+    seeded_client, bad_id: str
+) -> None:
+    """Project IDs with spaces, symbols or more than 20 characters are refused."""
+    res = _post_project(seeded_client, id=bad_id)
+    assert res.status_code == 200
+    assert b"may only contain letters, digits" in res.data
+    assert repositories.ProjectRepository().get_by_id(bad_id) is None
+    # The rest of the form is kept so the user does not retype it.
+    assert b"New Project" in res.data
+
+
+@pytest.mark.parametrize("good_id", ["P10", "P_DATA-2", "p" * 20])
+def test_project_id_with_valid_format_is_saved(
+    seeded_client, good_id: str
+) -> None:
+    """Short codes with letters, digits, '_' and '-' are still accepted."""
+    _post_project(seeded_client, id=good_id)
+    assert repositories.ProjectRepository().get_by_id(good_id) is not None
+
+
+@pytest.mark.parametrize(
+    ("min_cap", "max_cap"), [("1000", "1000"), ("1", "51"), ("51", "60")]
+)
+def test_project_capacity_above_limit_shows_message(
+    seeded_client, min_cap: str, max_cap: str
+) -> None:
+    """Unrealistic seat numbers (above 50) are refused with a clear message."""
+    res = _post_project(seeded_client, min_capacity=min_cap, max_capacity=max_cap)
+    assert res.status_code == 200
+    assert b"Capacities cannot exceed 50 seats per project" in res.data
+    assert repositories.ProjectRepository().get_by_id("PX") is None
+
+
+def test_project_capacity_at_limit_is_saved(seeded_client) -> None:
+    """Exactly 50 seats is still allowed."""
+    _post_project(seeded_client, min_capacity="50", max_capacity="50")
+    saved = repositories.ProjectRepository().get_by_id("PX")
+    assert saved is not None
+    assert saved.max_capacity == 50
+
+
+@pytest.mark.parametrize("bad_id", ["S 1", "S1;", "S" * 21])
+def test_student_id_with_invalid_format_shows_message(
+    seeded_client, bad_id: str
+) -> None:
+    """Student IDs follow the same format rule as project IDs."""
+    res = _post_student(seeded_client, id=bad_id)
+    assert res.status_code == 200
+    assert b"may only contain letters, digits" in res.data
+    assert repositories.StudentRepository().get_by_id(bad_id) is None
