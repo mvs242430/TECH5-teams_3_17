@@ -16,7 +16,7 @@ All Week 2 functional, integration, and documentation goals are **100% complete 
 | :--- | :---: | :--- |
 | **Team B implements the assignment approach in `solvers.py` and analytical metrics in `metrics.py`, replacing the mock engine.** | ✅ **Done** | [`app/engine/solvers.py`](../../app/engine/solvers.py), [`app/engine/strategies.py`](../../app/engine/strategies.py), and [`app/engine/metrics.py`](../../app/engine/metrics.py) fully implemented; `AssignmentEngine.execute_run` runs live Pyomo/HiGHS MILP optimization without falling back to `MockAssignmentEngine`. |
 | **Team A implements the multi-solution comparison view and transparent recommendation logic.** | ✅ **Done** | [`app/visualization/routes.py`](../../app/visualization/routes.py), [`compare.html`](../../app/visualization/templates/compare.html), [`recommendations.html`](../../app/visualization/templates/recommendations.html), and [`solution_detail.html`](../../app/visualization/templates/solution_detail.html) render live side-by-side deltas, plain-language trade-offs, policy advice, and interactive **Lock & Rerun**. |
-| **Both teams run automated integration tests to verify that real engine solutions flow smoothly into the user interface.** | ✅ **Done** | `.venv/bin/python -m pytest -q` $\rightarrow$ **`85 passed in 1.86s` (`0 failed`, `0 xfailed`)**, including all 15 baseline `xfail` tests plus 34 new unit/integration tests added by the team. |
+| **Both teams run automated integration tests to verify that real engine solutions flow smoothly into the user interface.** | ✅ **Done** | `.venv/bin/python -m pytest -q` $\rightarrow$ **`99 passed in 5.52s` (`0 failed`, `0 xfailed`)**, including all 15 baseline `xfail` tests plus 48 new unit/integration tests added by the team. |
 | **Milestone: Solves real cohorts, retains multiple alternatives, and displays live comparisons without mock data.** | ✅ **Done** | Verified across all 4 Benchmark Scenarios (`standard`, `fixed`, `infeasible`, `conflicting`). Standard cohort generates 3 distinct Pareto solutions (`PREFERENCE`, `SKILL_FIT`, `BALANCED`) via integer no-good cuts. |
 | **Deliverable: Report with details about implementation decisions and documentation.** | ✅ **Done** | Documented in Section 3 below and in 15 per-issue architectural decision logs under [`docs/team_related/issues_solutions/`](../team_related/issues_solutions/). |
 
@@ -28,7 +28,7 @@ All Week 2 functional, integration, and documentation goals are **100% complete 
 
 | Member | Sub-Team & Role | Completed Tasks Merged to `main` | Key Files Delivered |
 | :--- | :--- | :--- | :--- |
-| **Julia** | **Team A (`A1`)** · Data Management, Validation & DB Docs | [`A1.2`](../team_related/issues_solutions/A1.2_solution.md) Projects CRUD & requirement matrix<br>[`A1.3`](../team_related/issues_solutions/A1.3_solution.md) Pre-solver UI validation & error banners<br>[`A1.4`](../team_related/issues_solutions/A1.4_solution.md) 3NF relational database documentation | [`routes.py`](../../app/visualization/routes.py), [`projects.html`](../../app/visualization/templates/projects.html), [`project_form.html`](../../app/visualization/templates/project_form.html), [`database_design.md`](../database_design.md) |
+| **Julia** | **Team A (`A1`)** · Data Management, Validation & DB Docs | [`0.2`](../team_related/issues/0.2.md) PR & issue templates<br>[`0.4`](../team_related/issues/0.4.md) README test-count fixes<br>[`A1.2`](../team_related/issues_solutions/A1.2_solution.md) Projects CRUD & requirement matrix<br>[`A1.3`](../team_related/issues_solutions/A1.3_solution.md) Pre-solver UI validation & error banners<br>[`A1.4`](../team_related/issues_solutions/A1.4_solution.md) 3NF relational database documentation | [`routes.py`](../../app/visualization/routes.py), [`projects.html`](../../app/visualization/templates/projects.html), [`project_form.html`](../../app/visualization/templates/project_form.html), [`database_design.md`](../database_design.md) |
 | **Tanver** | **Team A (`A2`)** · Comparison View, Recommendations & UX | [`A2.1`](../team_related/issues_solutions/A2.1_solution.md) Side-by-side `/compare` view & delta cards<br>[`A2.2`](../team_related/issues_solutions/A2.2_solution.md) Transparent `/recommendations/<run_id>` UI<br>[`A2.3`](../team_related/issues_solutions/A2.3_solution.md) Interactive **Lock & Rerun** workflow | [`routes.py`](../../app/visualization/routes.py), [`compare.html`](../../app/visualization/templates/compare.html), [`recommendations.html`](../../app/visualization/templates/recommendations.html), [`solution_detail.html`](../../app/visualization/templates/solution_detail.html) |
 | **Daniel** | **Team B (`B1`)** · Analytical Metrics & Fairness | [`B1.1`](../team_related/issues_solutions/B1.1_solution.md) Skill-fit score & Gini inequality index<br>[`B1.2`](../team_related/issues_solutions/B1.2_solution.md) 4-pillar solution indicators<br>[`B1.3`](../team_related/issues_solutions/B1.3_solution.md) Pairwise solution trade-off comparator | [`app/engine/metrics.py`](../../app/engine/metrics.py), [`tests/test_metrics.py`](../../tests/test_metrics.py) |
 | **Torkil** | **Team B (`B2`)** · MILP Optimization & Strategies | [`0.3`](../team_related/issues_solutions/0.3_solution.md) Pyomo & HiGHS solver setup<br>[`B2.1`](../team_related/issues_solutions/B2.1_solution.md) Base MILP model & `PreferenceOrientedSolver`<br>[`B2.2`](../team_related/issues_solutions/B2.2_solution.md) `SkillFitOrientedSolver` & `BalancedTradeoffSolver`<br>[`B2.3`](../team_related/issues_solutions/B2.3_solution.md) Integer no-good cuts for distinct alternatives | [`app/engine/strategies.py`](../../app/engine/strategies.py), [`requirements.txt`](../../requirements.txt), [`tests/test_solvers.py`](../../tests/test_solvers.py) |
@@ -40,8 +40,8 @@ All Week 2 functional, integration, and documentation goals are **100% complete 
 
 > **Why GitHub Insights displays 7 authors:**  
 > Our team has **5 students** (Julia, Tanver, Daniel, Torkil, and Marie). GitHub Pulse counts **7 distinct commit identities** because:
-> 1. Marie commited from 2 different accounts.
-> 3. 1 commit from GitHub Copilot / starter setup.
+> 1. Marie committed from 2 different Git identities (two machines).
+> 2. The starter package was committed by the course instructor (Julio C. Góez) under 2 name spellings.
 
 ---
 
@@ -71,26 +71,28 @@ All Week 2 functional, integration, and documentation goals are **100% complete 
 
 ## 4. End-to-End Verification & Benchmark Results
 
-### 4.1 Automated Test Suite (`85 passed, 0 xfailed`)
+### 4.1 Automated Test Suite (`99 passed, 0 xfailed`)
 
-All **51 original starter tests** (including all 15 previously `xfailed` target tasks) plus **34 new unit and integration tests** pass:
+All **51 original starter tests** (including all 15 previously `xfailed` target tasks) plus **48 new unit and integration tests** pass (including the review fixes from branch `a1-input-fixes`):
 
 ```text
 $ .venv/bin/python -m pytest -q
 ........................................................................ [ 84%]
 .............                                                            [100%]
-85 passed in 1.86s
+99 passed in 5.52s
 ```
 
 | Test Module | Layer Verified | Result |
 | :--- | :--- | :---: |
-| [`tests/test_metrics.py`](../../tests/test_metrics.py) | Skill fit, Gini coefficient, 4-pillar solution indicators, pairwise solution comparison (`B1.1–B1.3`) | `17 passed` |
+| [`tests/test_metrics.py`](../../tests/test_metrics.py) | Skill fit, Gini coefficient, 4-pillar solution indicators, pairwise solution comparison (`B1.1–B1.3`) | `6 passed` |
 | [`tests/test_solvers.py`](../../tests/test_solvers.py) | Base MILP constraints, fixed locks, mandatory skills, 3 concrete strategies, integer no-good cuts (`B2.1–B2.3`, `B3.1–B3.2`) | `12 passed` |
 | [`tests/test_edge_cases.py`](../../tests/test_edge_cases.py) | All 15 specification edge cases (incomplete/tied preferences, zero skills/requirements, capacity deficits, no-good cuts) (`B3.4`) | `15 passed` |
 | [`tests/test_contract_and_engine.py`](../../tests/test_contract_and_engine.py) | `AssignmentEngineContract` compliance, validation outcomes, persistence & retrieval (`B3.1–B3.2`) | `5 passed` |
-| [`tests/test_visualization_component.py`](../../tests/test_visualization_component.py) | RBAC, Skills & Projects CRUD, validation alerts, `/compare`, `/recommendations`, Lock & Rerun (`A1.1–A1.3`, `A2.1–A2.3`) | `28 passed` |
+| [`tests/test_visualization_component.py`](../../tests/test_visualization_component.py) | RBAC, Skills & Projects CRUD, validation alerts, `/compare`, `/recommendations`, Lock & Rerun, ID format & seat limits (`A1.1–A1.3`, `A2.1–A2.3`) | `46 passed` |
 | [`tests/test_component_integration.py`](../../tests/test_component_integration.py) | Full lifecycle seed $\rightarrow$ solve $\rightarrow$ view $\rightarrow$ recommend $\rightarrow$ compare $\rightarrow$ lock & rerun + infeasible cohort flow | `2 passed` |
-| [`tests/test_database_integrity.py`](../../tests/test_database_integrity.py) | SQLite 3NF schema constraints, foreign keys, cascades, and repository round-trips | `6 passed` |
+| [`tests/test_persistence.py`](../../tests/test_persistence.py) | SQLite schema constraints, foreign keys, cascades, and repository round-trips | `3 passed` |
+| [`tests/test_models.py`](../../tests/test_models.py) | Domain model construction and invariants | `4 passed` |
+| [`tests/test_validation.py`](../../tests/test_validation.py) | Pre-solver input validation rules | `6 passed` |
 
 ### 4.2 Live Benchmark Scenarios Verification (Zero Mock Data)
 
@@ -109,3 +111,33 @@ Detailed architectural rationale, data-flow walkthroughs, files changed, and ver
 
 - **Team A Solutions:** [`A1.1`](../team_related/issues_solutions/A1.1_solution.md) · [`A1.2`](../team_related/issues_solutions/A1.2_solution.md) · [`A1.3`](../team_related/issues_solutions/A1.3_solution.md) · [`A1.4`](../team_related/issues_solutions/A1.4_solution.md) · [`A2.1`](../team_related/issues_solutions/A2.1_solution.md) · [`A2.2`](../team_related/issues_solutions/A2.2_solution.md) · [`A2.3`](../team_related/issues_solutions/A2.3_solution.md)
 - **Team B Solutions:** [`0.3`](../team_related/issues_solutions/0.3_solution.md) · [`B1.1`](../team_related/issues_solutions/B1.1_solution.md) · [`B1.2`](../team_related/issues_solutions/B1.2_solution.md) · [`B1.3`](../team_related/issues_solutions/B1.3_solution.md) · [`B2.1`](../team_related/issues_solutions/B2.1_solution.md) · [`B2.2`](../team_related/issues_solutions/B2.2_solution.md) · [`B2.3`](../team_related/issues_solutions/B2.3_solution.md) · [`B3.1`](../team_related/issues_solutions/B3.1_solution.md) · [`B3.2`](../team_related/issues_solutions/B3.2_solution.md) · [`B3.3`](../team_related/issues_solutions/B3.3_solution.md) · [`B3.4`](../team_related/issues_solutions/B3.4_solution.md)
+
+---
+
+
+## 6. Status Summary
+
+| | Items |
+| :--- | :--- |
+| **Done** | All Week 2 requirements in Section 1. Setup issues `0.2` (PR & issue templates) and `0.4` (README test counts) also closed. Follow-up sub-issues `A1.2.1` (mandatory skill needs level 1–5) and `A1.2.2` (`max_capacity ≥ 1`, form state kept on empty ID) were added during review and fixed before the merge to `main`. Two further review findings were fixed on branch `a1-input-fixes`: project and student IDs must now be 1–20 letters, digits, `_` or `-`, and capacities above 50 seats per project are refused. |
+| **In progress** | `A2.5` architecture & design documentation (done on branch `feature/task-a2.5-architecture-and-design-documentation`, not yet merged to `main`). |
+| **Blocked** | Nothing blocked. |
+
+## 7. Plan for Week 3
+
+| Owner | Issues |
+| :--- | :--- |
+| **Julia (A1)** | `X2` bad-data walkthrough with B3 · `X3` one full end-to-end test · `X6` Git evidence · help with `B3.6` testing evidence |
+| **Tanver (A2)** | `A2.4` role-access audit (Student Viewer can never change data) · `A2.5` finish architecture doc · `A2.6` reproducible demo script · `X4` clean-up |
+| **Daniel (B1)** | `B1.4` indicators part of the analytical note |
+| **Torkil (B2)** | `B2.4` formulation part of the analytical note · help with `A2.6` demo |
+| **Marie (B3)** | `B3.5` component contract · `B3.6` testing evidence · `X5` team reflection (collects input from everyone) |
+| **Everyone** | `X7` final release check |
+
+## 8. How We Used AI This Week
+
+- **Issue-driven prompts:** every issue file in `docs/team_related/issues/` ends with a ready-made prompt. Each member gave the AI that prompt plus the relevant files, and worked one issue per branch.
+- **Small steps, tests after each:** larger issues were split into steps (e.g. `A1.2` step 1 = create with validation, step 2 = edit/delete/pre-fill), with `pytest` run after every step before committing.
+- **Review and follow-ups:** during code review the AI was used to turn the problems found into new sub-issues (`A1.2.1`, `A1.2.2`) with exact acceptance criteria, which were then implemented before merging.
+- **Documentation:** the AI drafted the per-issue solution notes in `issues_solutions/` and the database documentation from real query output; we checked and edited them.
+- **What we checked ourselves:** solver outputs on all four benchmark scenarios, merge conflicts in the shared `routes.py`, and that existing starter tests were not modified.
