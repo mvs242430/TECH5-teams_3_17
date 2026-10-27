@@ -16,7 +16,7 @@ All Week 2 functional, integration, and documentation goals are **100% complete 
 | :--- | :---: | :--- |
 | **Team B implements the assignment approach in `solvers.py` and analytical metrics in `metrics.py`, replacing the mock engine.** | ✅ **Done** | [`app/engine/solvers.py`](../../app/engine/solvers.py), [`app/engine/strategies.py`](../../app/engine/strategies.py), and [`app/engine/metrics.py`](../../app/engine/metrics.py) fully implemented; `AssignmentEngine.execute_run` runs live Pyomo/HiGHS MILP optimization without falling back to `MockAssignmentEngine`. |
 | **Team A implements the multi-solution comparison view and transparent recommendation logic.** | ✅ **Done** | [`app/visualization/routes.py`](../../app/visualization/routes.py), [`compare.html`](../../app/visualization/templates/compare.html), [`recommendations.html`](../../app/visualization/templates/recommendations.html), and [`solution_detail.html`](../../app/visualization/templates/solution_detail.html) render live side-by-side deltas, plain-language trade-offs, policy advice, and interactive **Lock & Rerun**. |
-| **Both teams run automated integration tests to verify that real engine solutions flow smoothly into the user interface.** | ✅ **Done** | `.venv/bin/python -m pytest -q` $\rightarrow$ **`85 passed in 1.86s` (`0 failed`, `0 xfailed`)**, including all 15 baseline `xfail` tests plus 34 new unit/integration tests added by the team. |
+| **Both teams run automated integration tests to verify that real engine solutions flow smoothly into the user interface.** | ✅ **Done** | `.venv/bin/python -m pytest -q` $\rightarrow$ **`99 passed in 5.52s` (`0 failed`, `0 xfailed`)**, including all 15 baseline `xfail` tests plus 48 new unit/integration tests added by the team. |
 | **Milestone: Solves real cohorts, retains multiple alternatives, and displays live comparisons without mock data.** | ✅ **Done** | Verified across all 4 Benchmark Scenarios (`standard`, `fixed`, `infeasible`, `conflicting`). Standard cohort generates 3 distinct Pareto solutions (`PREFERENCE`, `SKILL_FIT`, `BALANCED`) via integer no-good cuts. |
 | **Deliverable: Report with details about implementation decisions and documentation.** | ✅ **Done** | Documented in Section 3 below and in 15 per-issue architectural decision logs under [`docs/team_related/issues_solutions/`](../team_related/issues_solutions/). |
 
@@ -71,28 +71,28 @@ All Week 2 functional, integration, and documentation goals are **100% complete 
 
 ## 4. End-to-End Verification & Benchmark Results
 
-### 4.1 Automated Test Suite (`85 passed, 0 xfailed`)
+### 4.1 Automated Test Suite (`99 passed, 0 xfailed`)
 
-All **51 original starter tests** (including all 15 previously `xfailed` target tasks) plus **34 new unit and integration tests** pass:
+All **51 original starter tests** (including all 15 previously `xfailed` target tasks) plus **48 new unit and integration tests** pass (including the review fixes from branch `a1-input-fixes`):
 
 ```text
 $ .venv/bin/python -m pytest -q
 ........................................................................ [ 84%]
 .............                                                            [100%]
-85 passed in 1.86s
+99 passed in 5.52s
 ```
 
 | Test Module | Layer Verified | Result |
 | :--- | :--- | :---: |
-| [`tests/test_metrics.py`](../../tests/test_metrics.py) | Skill fit, Gini coefficient, 4-pillar solution indicators, pairwise solution comparison (`B1.1–B1.3`) | `17 passed` |
+| [`tests/test_metrics.py`](../../tests/test_metrics.py) | Skill fit, Gini coefficient, 4-pillar solution indicators, pairwise solution comparison (`B1.1–B1.3`) | `6 passed` |
 | [`tests/test_solvers.py`](../../tests/test_solvers.py) | Base MILP constraints, fixed locks, mandatory skills, 3 concrete strategies, integer no-good cuts (`B2.1–B2.3`, `B3.1–B3.2`) | `12 passed` |
 | [`tests/test_edge_cases.py`](../../tests/test_edge_cases.py) | All 15 specification edge cases (incomplete/tied preferences, zero skills/requirements, capacity deficits, no-good cuts) (`B3.4`) | `15 passed` |
 | [`tests/test_contract_and_engine.py`](../../tests/test_contract_and_engine.py) | `AssignmentEngineContract` compliance, validation outcomes, persistence & retrieval (`B3.1–B3.2`) | `5 passed` |
-| [`tests/test_visualization_component.py`](../../tests/test_visualization_component.py) | RBAC, Skills & Projects CRUD, validation alerts, `/compare`, `/recommendations`, Lock & Rerun (`A1.1–A1.3`, `A2.1–A2.3`) | `28 passed` |
+| [`tests/test_visualization_component.py`](../../tests/test_visualization_component.py) | RBAC, Skills & Projects CRUD, validation alerts, `/compare`, `/recommendations`, Lock & Rerun, ID format & seat limits (`A1.1–A1.3`, `A2.1–A2.3`) | `46 passed` |
 | [`tests/test_component_integration.py`](../../tests/test_component_integration.py) | Full lifecycle seed $\rightarrow$ solve $\rightarrow$ view $\rightarrow$ recommend $\rightarrow$ compare $\rightarrow$ lock & rerun + infeasible cohort flow | `2 passed` |
-| [`tests/test_persistence.py`](../../tests/test_persistence.py) | SQLite schema constraints, foreign keys, cascades, and repository round-trips | <!-- TODO: count from pytest -v --> passed |
-| [`tests/test_models.py`](../../tests/test_models.py) | Domain model construction and invariants | <!-- TODO: count from pytest -v --> passed |
-| [`tests/test_validation.py`](../../tests/test_validation.py) | Pre-solver input validation rules | <!-- TODO: count from pytest -v --> passed |
+| [`tests/test_persistence.py`](../../tests/test_persistence.py) | SQLite schema constraints, foreign keys, cascades, and repository round-trips | `3 passed` |
+| [`tests/test_models.py`](../../tests/test_models.py) | Domain model construction and invariants | `4 passed` |
+| [`tests/test_validation.py`](../../tests/test_validation.py) | Pre-solver input validation rules | `6 passed` |
 
 ### 4.2 Live Benchmark Scenarios Verification (Zero Mock Data)
 
@@ -119,16 +119,15 @@ Detailed architectural rationale, data-flow walkthroughs, files changed, and ver
 
 | | Items |
 | :--- | :--- |
-| **Done** | All Week 2 requirements in Section 1. Setup issues `0.2` (PR & issue templates) and `0.4` (README test counts) also closed. Follow-up sub-issues `A1.2.1` (mandatory skill needs level 1–5) and `A1.2.2` (`max_capacity ≥ 1`, form state kept on empty ID) were added during review and fixed before the merge to `main`. |
+| **Done** | All Week 2 requirements in Section 1. Setup issues `0.2` (PR & issue templates) and `0.4` (README test counts) also closed. Follow-up sub-issues `A1.2.1` (mandatory skill needs level 1–5) and `A1.2.2` (`max_capacity ≥ 1`, form state kept on empty ID) were added during review and fixed before the merge to `main`. Two further review findings were fixed on branch `a1-input-fixes`: project and student IDs must now be 1–20 letters, digits, `_` or `-`, and capacities above 50 seats per project are refused. |
 | **In progress** | `A2.5` architecture & design documentation (done on branch `feature/task-a2.5-architecture-and-design-documentation`, not yet merged to `main`). |
-| **Known issues (accepted for now)** | Project form still accepts unrealistic values: minimum capacity has no upper limit (e.g. `1000` is accepted as long as max ≥ min), and project ID accepts any free text (no format or length rule). Not blocking the solver; to be handled in `X2` (bad-data walkthrough). |
 | **Blocked** | Nothing blocked. |
 
 ## 7. Plan for Week 3
 
 | Owner | Issues |
 | :--- | :--- |
-| **Julia (A1)** | `X2` bad-data walkthrough with B3 (incl. the two known project-form issues above) · `X3` one full end-to-end test · `X6` Git evidence · help with `B3.6` testing evidence |
+| **Julia (A1)** | `X2` bad-data walkthrough with B3 · `X3` one full end-to-end test · `X6` Git evidence · help with `B3.6` testing evidence |
 | **Tanver (A2)** | `A2.4` role-access audit (Student Viewer can never change data) · `A2.5` finish architecture doc · `A2.6` reproducible demo script · `X4` clean-up |
 | **Daniel (B1)** | `B1.4` indicators part of the analytical note |
 | **Torkil (B2)** | `B2.4` formulation part of the analytical note · help with `A2.6` demo |
