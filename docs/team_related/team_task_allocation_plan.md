@@ -14,7 +14,7 @@ Brief: *TECH5 Collaborative Project: The Student-to-Project Assignment Challenge
 | **A2** | Decision person: compare, recommendations, lock & re-run, access, demo | `routes.py` (compare/runs functions), `compare.html`, `recommendations.html`, `solution_detail.html`, `auth.py` | D3 architecture, D8 demo |
 | **B1** | Scores person: skill fit, fairness, comparison numbers | `app/engine/metrics.py` | D6 (indicators part) |
 | **B2** | Optimiser person: maths model, strategies, alternatives, professor approval | `app/engine/strategies.py`, `requirements.txt` | D6 (formulation part) |
-| **B3** | Boss + safety person: run orchestration, diagnostics, edge cases | `app/engine/solvers.py`, `tests/test_edge_cases.py` | D2 working app, D4 contract, D7 testing |
+| **B3** | Safety person: run orchestration, diagnostics, edge cases | `app/engine/solvers.py`, `tests/test_edge_cases.py` | D2 working app, D4 contract, D7 testing |
 | **All** | | | D9 team reflection |
 
 Deliverables: D1 progress reports · D2 working app · D3 architecture · D4 component contract · D5 database & SQL · D6 analytical note · D7 testing evidence · D8 reproducible demo · D9 team reflection.
