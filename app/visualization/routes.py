@@ -1443,17 +1443,25 @@ def compare_solutions() -> Any:
     With two valid IDs the comparison is fetched from
     ``AssignmentEngine.compare_solutions``; if that raises
     ``NotImplementedError`` the ``MockAssignmentEngine`` is used instead
-    (mirroring the fallback pattern in ``trigger_run``).
+    (mirroring the fallback pattern in ``trigger_run``).  Solutions that have
+    lost their assignments, or that cover different students, give a
+    ``danger`` flash message and a redirect instead of an error page.
 
     Returns:
         Rendered ``compare.html`` with ``sol_a``, ``sol_b``, ``comparison``,
         and ``all_solutions`` context variables.
     """
-    # Build the flat list of all solutions across recent runs for the dropdowns.
+    # Build the flat list of solutions across recent runs for the dropdowns.
+    # Loading a scenario deletes the students, which empties older solutions,
+    # so only solutions that still have assignments are offered.
     run_repo = repositories.RunRepository()
     recent_runs = run_repo.list_runs(limit=50)
+    usable_ids = run_repo.list_solution_ids_with_assignments()
     all_solutions: list[models.Solution] = [
-        sol for run in recent_runs for sol in run.solutions
+        sol
+        for run in recent_runs
+        for sol in run.solutions
+        if sol.id in usable_ids
     ]
 
     # Read the two requested solution IDs from the query string.
@@ -1487,6 +1495,16 @@ def compare_solutions() -> Any:
         )
         return flask.redirect(flask.url_for("visualization_web.compare_solutions"))
 
+    # An emptied solution has nothing to compare, and two empty solutions
+    # would still pass the engine's same-students check, so stop here.
+    if not sol_a.assignments or not sol_b.assignments:
+        flask.flash(
+            "One of these solutions no longer has any assignments because "
+            "its students were removed. Please select a newer solution.",
+            "danger",
+        )
+        return flask.redirect(flask.url_for("visualization_web.compare_solutions"))
+
     # Delegate comparison to the engine; fall back to the mock on
     # NotImplementedError (same pattern as trigger_run / lock_and_rerun).
     engine: contract.AssignmentEngineContract = solvers.AssignmentEngine()
@@ -1501,6 +1519,14 @@ def compare_solutions() -> Any:
         comparison = mocks.MockAssignmentEngine().compare_solutions(
             sol1_id, sol2_id
         )
+    except ValueError:
+        # The engine only compares solutions with the same students.
+        flask.flash(
+            "These solutions cover different students, so they cannot be "
+            "compared. Please select two solutions from the same cohort.",
+            "danger",
+        )
+        return flask.redirect(flask.url_for("visualization_web.compare_solutions"))
 
     # Enrich changed_assignments with human-readable student names and project
     # titles from the repositories so the Compare table displays full names.

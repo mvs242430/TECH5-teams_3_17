@@ -554,6 +554,20 @@ class RunRepository:
                 runs.append(run_obj)
             return runs
 
+    def list_solution_ids_with_assignments(self) -> set[str]:
+        """Retrieves the IDs of solutions that still have assignments.
+
+        Deleting a student cascades to ``assignments`` but leaves the row in
+        ``solutions``, so a solution can end up with no assignments at all.
+
+        Returns:
+            IDs of solutions with at least one row in ``assignments``.
+        """
+        with self.db.connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT DISTINCT solution_id FROM assignments;")
+            return {row["solution_id"] for row in cur.fetchall()}
+
     def get_run(self, run_id: str) -> models.AssignmentRun | None:
         """Retrieves an assignment run by ID with full solution details."""
         with self.db.connection() as conn:
