@@ -1057,3 +1057,138 @@ def test_student_id_with_invalid_format_shows_message(
     assert res.status_code == 200
     assert b"may only contain letters, digits" in res.data
     assert repositories.StudentRepository().get_by_id(bad_id) is None
+
+
+# -----------------------------------------------------------------------------
+# Issue A2.1.1 - Compare page with solutions from different cohorts
+# -----------------------------------------------------------------------------
+
+
+@pytest.fixture
+def real_engine_client(tmp_path: pathlib.Path):
+    """Admin test client on an empty database, using the real engine."""
+    db_file = tmp_path / "test_compare_cohort.db"
+    app = create_app({"TESTING": True, "DATABASE_PATH": db_file})
+    return app.test_client()
+
+
+def _run_engine(client) -> models.AssignmentRun:
+    """Triggers one run through the web route and returns that new run."""
+    repo = repositories.RunRepository()
+    known_ids = {run.id for run in repo.list_runs(limit=100)}
+    client.post(
+        "/runs/trigger",
+        data={"primary_strategy": "PREFERENCE", "max_alternatives": 3},
+        follow_redirects=True,
+    )
+    new_id = next(
+        run.id for run in repo.list_runs(limit=100) if run.id not in known_ids
+    )
+    return repo.get_run(new_id)
+
+
+def _load_and_run(client, scenario: str = "standard") -> models.AssignmentRun:
+    """Loads a benchmark scenario, then runs the engine on it."""
+    client.post(f"/load-scenario/{scenario}", follow_redirects=True)
+    return _run_engine(client)
+
+
+def test_compare_same_cohort_across_runs_still_works(
+    real_engine_client,
+) -> None:
+    """Two runs of the same students compare normally."""
+    first = _load_and_run(real_engine_client)
+    second = _run_engine(real_engine_client)
+
+    res = real_engine_client.get(
+        f"/compare?sol1={first.solutions[0].id}"
+        f"&sol2={second.solutions[1].id}"
+    )
+
+    assert res.status_code == 200
+    assert b"Changed Student Allocations" in res.data
+
+
+def test_compare_different_students_shows_message(real_engine_client) -> None:
+    """A 10-student and an 11-student solution give a message, not a crash."""
+    before = _load_and_run(real_engine_client)
+    real_engine_client.post(
+        "/students/new",
+        data={
+            "id": "S11",
+            "display_name": "New Student",
+            "preferences_text": "P1, P2, P3",
+        },
+        follow_redirects=True,
+    )
+    after = _run_engine(real_engine_client)
+
+    res = real_engine_client.get(
+        f"/compare?sol1={before.solutions[0].id}"
+        f"&sol2={after.solutions[0].id}",
+        follow_redirects=True,
+    )
+
+    assert res.status_code == 200
+    assert b"cover different students" in res.data
+    assert b"Changed Student Allocations" not in res.data
+
+
+def test_compare_after_scenario_reload_shows_message(
+    real_engine_client,
+) -> None:
+    """An old solution emptied by a reload gives a message, not a crash."""
+    old = _load_and_run(real_engine_client)
+    new = _load_and_run(real_engine_client)
+
+    res = real_engine_client.get(
+        f"/compare?sol1={old.solutions[0].id}&sol2={new.solutions[0].id}",
+        follow_redirects=True,
+    )
+
+    assert res.status_code == 200
+    assert b"no longer has any assignments" in res.data
+    assert b"Changed Student Allocations" not in res.data
+
+
+def test_compare_two_emptied_solutions_shows_message(
+    real_engine_client,
+) -> None:
+    """Two emptied solutions give a message instead of a blank comparison."""
+    old = _load_and_run(real_engine_client)
+    real_engine_client.post("/load-scenario/standard", follow_redirects=True)
+
+    res = real_engine_client.get(
+        f"/compare?sol1={old.solutions[0].id}&sol2={old.solutions[1].id}",
+        follow_redirects=True,
+    )
+
+    assert res.status_code == 200
+    assert b"no longer has any assignments" in res.data
+    assert b"Changed Student Allocations" not in res.data
+
+
+def test_compare_dropdown_hides_emptied_solutions(real_engine_client) -> None:
+    """Only solutions that still have assignments can be selected."""
+    old = _load_and_run(real_engine_client)
+    new = _load_and_run(real_engine_client)
+
+    res = real_engine_client.get("/compare")
+
+    assert res.status_code == 200
+    page = res.get_data(as_text=True)
+    assert all(sol.id in page for sol in new.solutions)
+    assert not any(sol.id in page for sol in old.solutions)
+
+
+def test_solution_ids_with_assignments_skips_emptied_solutions(
+    real_engine_client,
+) -> None:
+    """The repository lists solutions with assignments, not emptied ones."""
+    old = _load_and_run(real_engine_client)
+    new = _load_and_run(real_engine_client)
+
+    ids = repositories.RunRepository().list_solution_ids_with_assignments()
+
+    assert {sol.id for sol in new.solutions} == ids
+    assert not ids & {sol.id for sol in old.solutions}

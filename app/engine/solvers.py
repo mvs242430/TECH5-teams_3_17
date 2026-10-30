@@ -510,6 +510,7 @@ class AssignmentEngine(contract.AssignmentEngineContract):
 
         Raises:
             KeyError: If either solution cannot be found.
+            ValueError: If the two solutions do not contain the same students.
         """
         sol_a = self.run_repo.get_solution(solution_a_id)
         sol_b = self.run_repo.get_solution(solution_b_id)

@@ -191,4 +191,5 @@ class AssignmentEngineContract(abc.ABC):
 
         Raises:
             KeyError: If either solution cannot be found.
+            ValueError: If the two solutions do not contain the same students.
         """
