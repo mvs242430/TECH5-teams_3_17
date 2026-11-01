@@ -127,7 +127,7 @@ The 400 × 30 cohort uses `random.Random(3)`. Each of the 400 students ranks 8 o
 
 The test for a time-limit stop with a stored allocation forces the stop reason on a real solve, because the real timing window is too narrow for a stable test. The 0.05-second row above is the same case on real HiGHS, checked by hand.
 
-The `/compare` page was checked through its rendered HTML and tests. It was not viewed in a browser.
+The `/compare` page was checked through its rendered HTML and tests. It was viewed in a browser later: see Section 6.
 
 ---
 
@@ -140,5 +140,101 @@ The `/compare` page was checked through its rendered HTML and tests. It was not 
 5. *Why did setting `solver.config.time_limit` do nothing?* The legacy `solve()` replaces the config value with its own `timelimit` argument, which is `None` by default.
 6. *Why can a solution be `FEASIBLE` and still be used?* It meets all hard constraints. We only cannot say that nothing better exists, and the run page tells the coordinator so.
 7. *How do the new edge case 13 tests prove that HiGHS gave the answer?* They assert that validation passes, and that the run has a `termination_condition` of `infeasible`, which only a real solve sets.
+
+> **Pedagogical Checkpoint:** *"If you cannot explain every line, ask me to teach you before accepting or committing."*
+
+---
+
+## 6. Updates Made After PR 55: Screens That Say What Happened
+
+**Branch:** `deliverable6-ui-followups`
+**Date:** 2026-11-01
+
+PR 55 made the engine honest about what it proved. These updates make the screens match it.
+
+### Pattern and scope
+
+- **Pattern Applied:** *Blueprint/MVC*. Each fix is a small change to a route or a template.
+- **Why Chosen:** The engine already saves everything these screens need, so only the display was wrong.
+- **Component Scope:** Only `app/visualization/`. `app/engine/`, `app/contract/`, `app/domain/` and `app/persistence/` are not changed.
+
+### Fix 1: A failed Lock & Rerun is no longer shown as a success
+
+Before, the route always showed the green message, so a failed rerun showed "0 students changed" next to its warning. The green message now only appears if the new run has a solution.
+
+| New run | What the coordinator sees |
+| :--- | :--- |
+| Has a solution | Green message with the changed students and a compare link |
+| `FAILED` | Warning: the solver stopped, and this does not prove the lock is impossible |
+| `INFEASIBLE` | Warning: no feasible solution with this lock |
+
+`lock_and_rerun` saves the lock before it runs the engine, so the lock stays saved after a failed rerun. Both warnings therefore also say that the student is still locked, and link to the Fixed Locks page. `_flash_rerun_without_solution` builds the warning with `Markup(...).format(...)`, which escapes the values it inserts.
+
+There is no message for `INVALID_INPUT`, because a rerun cannot reach that status. Each reason the validator has for it is blocked first:
+
+- Blank IDs are stopped by the ID check on the forms.
+- Duplicate IDs, wrong capacities and contradictory locks are stopped by the primary keys, the `CHECK` rules and the `UNIQUE` rule in `schema.sql`.
+- Unknown projects in preference lists are stopped by foreign keys.
+- An empty cohort or catalogue, or a lock on a student or project that no longer exists, fails earlier in `lock_and_rerun`, because saving the lock breaks a foreign key. Nothing catches that error, so the page crashes with an HTTP 500 and the engine never runs. This crash is older than these updates (see Known limits).
+
+An over-capacity lock is a different case: `validate_cohort` marks it infeasible, so it ends as `INFEASIBLE`.
+
+### Fix 2: The FAILED run page no longer blames the constraints
+
+A `FAILED` run says nothing about the constraints, so "Review constraint diagnostics above" pointed the coordinator at the wrong thing. For `FAILED` runs, `run_detail.html` now says that the solver stopped and that the run should be tried again. Other statuses keep the old sentence.
+
+### Fix 3: Unproven alternatives are named on two more pages
+
+The engine already saves the warning and the stop reason with each solution.
+
+- `solution_detail.html` shows `solution.warnings`. This also shows any validator warnings saved with the solution.
+- `_unproven_alternatives` in `routes.py` lists the alternatives whose saved `termination_condition` is not `optimal`. `recommendations.html` names them in a note at the top of the page.
+
+A solution with no saved stop reason makes no claim, so it is left out of the list.
+
+### Files changed
+
+| File Path | Modification Description |
+| :--- | :--- |
+| `app/visualization/routes.py` | Adds `_flash_rerun_without_solution` and `_unproven_alternatives`. The green Lock & Rerun message now needs a solution. |
+| `app/visualization/templates/run_detail.html` | Adds the wording for `FAILED` runs. |
+| `app/visualization/templates/solution_detail.html` | Shows the warnings saved with the solution. |
+| `app/visualization/templates/recommendations.html` | Names the unproven alternatives. |
+| `tests/test_visualization_component.py` | Adds 8 test cases. No existing test or assertion changed. |
+
+### Verification
+
+- Verification command: `python -m pytest -q`, run with the project's `.venv`.
+- Result: `145 passed` (137 before, 8 new), zero regressions.
+- Run against the code before these fixes, 6 of the 8 new test cases fail. The other 2 guard behaviour that must stay the same: an `INFEASIBLE` run keeps its pointer to the constraints, and a normal run shows no unproven note.
+
+These checks used a real browser on port 5050, with a throwaway database and the standard scenario. For the unproven and `FAILED` views, the stop reason was forced on the solve, as it is in the tests.
+
+| Check | Result |
+| :--- | :--- |
+| `/compare`, Alt 1 → Alt 2, desktop width | ΔWorst Rank card shows `+1` in red and sits in the grid with the other five cards |
+| `/compare`, phone width | The page is too wide, but so is the dashboard, because the top navigation sets the width of every page. The new card does not cause this. |
+| Solution page, unproven alternative | Warning shown above the indicators |
+| Recommendations page | Note reads "Not proven optimal: Alt 2." |
+| `FAILED` run page | New wording shown, old sentence gone |
+| Real Lock & Rerun that overfills P1 | One yellow warning with the link to Fixed Locks, no green message, no console errors |
+
+The test for a time-limit stop with a stored allocation stays as it is. The real timing window is too narrow for a stable test, as Section 4 explains.
+
+### Known limits
+
+- The `INFEASIBLE` run page lists each reason twice. PR 51 (X2) fixes this.
+- `/compare` does not say that a solution is unproven.
+- The top navigation does not fit on a phone. This affects the whole app.
+- A failed Lock & Rerun does not bring back a lock it replaced. If the student already had a lock, the new lock overwrites it, and the warning does not mention the old one.
+- Lock & Rerun crashes with an HTTP 500 if the student or project no longer exists, for example from a page that was opened before the data was cleared. This is older than these updates. PR 51 fixes the same crash on the Fixed Locks form only.
+- A coordinator can create a lock through Lock & Rerun but cannot remove it. The Fixed Locks page has no remove control for that role, so an administrator has to remove the lock. Clearing or reloading the data also removes locks, but it removes everything else too.
+
+### Check your understanding
+
+1. *Why does the green message depend on the run having a solution, and not on its status?* A solution is what the message reports on. With no solution there are no moved students to count and nothing to compare.
+2. *Why do the warnings say the student is still locked?* The route saves the lock before the rerun, and a failed rerun does not undo that. Without the note, every later run would keep the lock without the coordinator knowing.
+3. *Why is there no `INVALID_INPUT` message in the Lock & Rerun route?* A rerun cannot reach that status, so the message could never run and could never be tested on real data.
+4. *Why did this fix need no change to the engine or the database?* The engine already saved the warning and the stop reason with each solution. Only the display was missing.
 
 > **Pedagogical Checkpoint:** *"If you cannot explain every line, ask me to teach you before accepting or committing."*

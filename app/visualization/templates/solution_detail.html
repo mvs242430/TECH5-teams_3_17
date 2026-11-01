@@ -22,6 +22,18 @@
 {% set fair = solution.indicators.get('fairness', {}) %}
 {% set cap = solution.indicators.get('capacity', {}) %}
 
+<!-- Notices saved with this solution -->
+{% if solution.warnings %}
+  <div class="alert alert-warning" style="align-items: flex-start; flex-direction: column; gap: 0.25rem;">
+    <strong>Notices &amp; Warnings:</strong>
+    <ul style="margin-left: 1.25rem; font-size: 0.88rem;">
+      {% for w in solution.warnings %}
+        <li>{{ w }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+{% endif %}
+
 <!-- Solution KPI Grid -->
 <div class="kpi-grid">
   <div class="kpi-card">

@@ -168,7 +168,11 @@
       </div>
     {% else %}
       <p style="color: var(--text-muted); text-align: center; padding: 2rem 0;">
-        No feasible solutions were generated for this run. Review constraint diagnostics above.
+        {% if run.status == 'FAILED' %}
+          The solver stopped before finding an allocation. This does not mean the constraints are wrong, so try the run again.
+        {% else %}
+          No feasible solutions were generated for this run. Review constraint diagnostics above.
+        {% endif %}
       </p>
     {% endif %}
   </div>

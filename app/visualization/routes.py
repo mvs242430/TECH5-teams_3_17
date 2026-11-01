@@ -1285,6 +1285,43 @@ def view_solution(solution_id: str) -> Any:
     )
 
 
+def _flash_rerun_without_solution(
+    run_status: str, student_id: str, project_id: str
+) -> None:
+    """Warns that a Lock & Rerun ended without a solution.
+
+    Such a rerun moves no students, so the success message would mislead. The
+    lock itself stays saved, so the warning also says where to review it.
+
+    Args:
+        run_status: Status of the new run.
+        student_id: Identifier of the locked student.
+        project_id: Identifier of the locked project.
+    """
+    if run_status == "FAILED":
+        reason = (
+            "Solver stopped before finding a solution. This does not prove "
+            "that the lock is impossible."
+        )
+    else:
+        reason = "Solver could not find a feasible solution with this lock."
+
+    flask.flash(
+        markupsafe.Markup(
+            "{reason} Student {student_id} is still locked to Project "
+            '{project_id}. <a href="{url}" style="color: inherit; '
+            'text-decoration: underline; font-weight: 600; margin-left: '
+            '0.5rem;">Review fixed locks &rarr;</a>'
+        ).format(
+            reason=reason,
+            student_id=student_id,
+            project_id=project_id,
+            url=flask.url_for("visualization_web.list_fixed_assignments"),
+        ),
+        "warning",
+    )
+
+
 @web_bp.post("/solutions/<solution_id>/lock-and-rerun")
 def lock_and_rerun(solution_id: str) -> flask.Response:
     """Locks a student assignment from a solution and triggers a new run."""
@@ -1389,39 +1426,27 @@ def lock_and_rerun(solution_id: str) -> flask.Response:
                     if orig_map.get(s_id) != p_id
                 )
 
-    compare_url = (
-        flask.url_for(
+    if new_solution_id:
+        compare_url = flask.url_for(
             "visualization_web.compare_solutions",
             sol1=solution_id,
             sol2=new_solution_id,
         )
-        if new_solution_id
-        else flask.url_for("visualization_web.compare_solutions")
-    )
-    compare_link_html = (
-        f'<a href="{compare_url}" style="color: inherit; text-decoration: '
-        f'underline; font-weight: 600; margin-left: 0.5rem;">'
-        f"Compare with previous run &rarr;</a>"
-    )
-    flask.flash(
-        markupsafe.Markup(
-            f"Student {student_id} locked to Project {project_id}. "
-            f"{changed_count} students changed compared with the previous run."
-            f" {compare_link_html}"
-        ),
-        "success",
-    )
-    if new_run.status == "INFEASIBLE":
-        flask.flash(
-            "Solver could not find a feasible solution with this lock.",
-            "warning",
+        compare_link_html = (
+            f'<a href="{compare_url}" style="color: inherit; text-decoration: '
+            f'underline; font-weight: 600; margin-left: 0.5rem;">'
+            f"Compare with previous run &rarr;</a>"
         )
-    elif new_run.status == "FAILED":
         flask.flash(
-            "Solver stopped before finding a solution. This does not prove "
-            "that the lock is impossible.",
-            "warning",
+            markupsafe.Markup(
+                f"Student {student_id} locked to Project {project_id}. "
+                f"{changed_count} students changed compared with the previous "
+                f"run. {compare_link_html}"
+            ),
+            "success",
         )
+    else:
+        _flash_rerun_without_solution(new_run.status, student_id, project_id)
 
     return flask.redirect(
         flask.url_for("visualization_web.view_run", run_id=new_run.id)
@@ -1437,6 +1462,23 @@ def clear_solutions() -> flask.Response:
 # -----------------------------------------------------------------------------
 # Comparison & Recommendations
 # -----------------------------------------------------------------------------
+
+
+def _unproven_alternatives(solutions: list[models.Solution]) -> list[int]:
+    """Lists the alternatives the solver kept without proving them optimal.
+
+    Args:
+        solutions: Solutions of one run.
+
+    Returns:
+        Alternative numbers whose solve stopped before the optimality proof.
+        A solution with no saved stop reason makes no claim, so it is left out.
+    """
+    return [
+        s.alternative_number
+        for s in solutions
+        if s.diagnostics.get("termination_condition", "optimal") != "optimal"
+    ]
 
 
 @web_bp.get("/compare")
@@ -1577,4 +1619,5 @@ def view_recommendations(run_id: str) -> Any:
         "recommendations.html",
         run=run,
         recommendations=recs,
+        unproven_alternatives=_unproven_alternatives(run.solutions),
     )
