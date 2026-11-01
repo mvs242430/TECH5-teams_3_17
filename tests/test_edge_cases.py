@@ -19,11 +19,23 @@ specification:
 15. Strict avoidance of duplicate solutions via no-good integer cuts.
 """
 
+import pathlib
+
 import pytest
 
 from app.domain import models
 from app.domain import validation
 from app.engine import solvers
+from app.persistence import database
+from app.persistence import repositories
+
+
+def _engine(tmp_path: pathlib.Path) -> solvers.AssignmentEngine:
+    """Returns an engine on a throwaway database, so locks do not leak."""
+    db_manager = database.DatabaseManager(tmp_path / "edge_cases.db")
+    return solvers.AssignmentEngine(
+        run_repo=repositories.RunRepository(db_manager)
+    )
 
 
 def test_edge_case_1_incomplete_preferences() -> None:
@@ -328,6 +340,89 @@ def test_edge_case_12_unavailable_mandatory_skill() -> None:
     res = validation.validate_cohort([s1], projects, skills, [])
     assert res.is_valid is False
     assert any("Mandatory requirement impossible" in err for err in res.errors)
+
+
+def _assert_solver_proves_infeasible(
+    engine: solvers.AssignmentEngine,
+    students: list[models.Student],
+    projects: list[models.Project],
+    fixed: list[models.FixedAssignment] | None = None,
+) -> None:
+    """Asserts validation passes and HiGHS itself proves infeasibility."""
+    res = validation.validate_cohort(
+        students, projects, fixed_assignments=fixed
+    )
+    assert res.is_valid is True
+    assert res.is_feasible is True
+
+    run = engine.run_assignment(
+        students, projects, fixed_assignments=fixed, max_alternatives=2
+    )
+
+    assert run.status == "INFEASIBLE"
+    assert run.solutions == []
+    assert run.diagnostics["solver_status"] == "INFEASIBLE"
+    # Only a real solve sets this; the validator's early exit has no such key.
+    assert run.diagnostics["termination_condition"] == "infeasible"
+
+
+def _mandatory_rust(project_id: str) -> list[models.ProjectRequirement]:
+    """Returns a mandatory level-2 Rust requirement for one project."""
+    return [
+        models.ProjectRequirement(
+            project_id=project_id,
+            skill_id="rust",
+            minimum_level=2,
+            is_mandatory=True,
+        )
+    ]
+
+
+def test_edge_case_13_two_projects_need_the_only_qualified_student(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Case 13: Each project is fine alone, but both need the same student."""
+    projects = [
+        models.Project(
+            id=project_id,
+            title=project_id,
+            min_capacity=1,
+            max_capacity=2,
+            requirements=_mandatory_rust(project_id),
+        )
+        for project_id in ("P1", "P2")
+    ]
+    students = [
+        models.Student(id="S1", display_name="S1", skills={"rust": 3}),
+        models.Student(id="S2", display_name="S2", skills={"rust": 1}),
+    ]
+
+    _assert_solver_proves_infeasible(_engine(tmp_path), students, projects)
+
+
+def test_edge_case_13_fixed_student_lacks_mandatory_skill(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Case 13: A lock forces a student onto a project that forbids them."""
+    projects = [
+        models.Project(
+            id="P1",
+            title="P1",
+            min_capacity=1,
+            max_capacity=2,
+            requirements=_mandatory_rust("P1"),
+        ),
+        models.Project(id="P2", title="P2", min_capacity=0, max_capacity=2),
+    ]
+    students = [
+        models.Student(id="S1", display_name="S1", skills={"rust": 3}),
+        models.Student(id="S2", display_name="S2", skills={"rust": 1}),
+    ]
+    fixed = [models.FixedAssignment(student_id="S2", project_id="P1")]
+
+    _assert_solver_proves_infeasible(
+        _engine(tmp_path), students, projects, fixed
+    )
 
 
 def test_edge_case_13_no_feasible_solution() -> None:

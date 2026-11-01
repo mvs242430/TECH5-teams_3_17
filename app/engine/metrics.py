@@ -419,7 +419,7 @@ def compare_two_solutions(
     In compliance with Section 7.4 of the specification, identifies:
     - Changed student allocations between solutions A and B.
     - Improved and worsened student preference ranks.
-    - Deltas in mean skill-fit, mean rank, and Gini coefficient.
+    - Deltas in mean skill-fit, mean rank, worst rank, and Gini coefficient.
     - Human-readable trade-off summary statements.
 
     Args:
@@ -537,6 +537,12 @@ def compare_two_solutions(
         4,
     )
 
+    # Uses the same worst rank as the run page, where an unranked student
+    # counts as one rank below the cohort's worst stated preference.
+    delta_worst_rank = fairness_b.get("worst_rank", 0) - fairness_a.get(
+        "worst_rank", 0
+    )
+
     delta_unranked_count = fairness_b.get(
         "unranked_count", 0
     ) - fairness_a.get("unranked_count", 0)
@@ -550,6 +556,7 @@ def compare_two_solutions(
     delta_metrics = {
         "mean_skill_fit_delta": delta_mean_skill_fit,
         "mean_rank_delta": delta_mean_rank,
+        "worst_rank_delta": delta_worst_rank,
         "unranked_count_delta": delta_unranked_count,
         "gini_delta": delta_gini,
     }
@@ -577,6 +584,17 @@ def compare_two_solutions(
     elif delta_mean_rank < 0:
         trade_off_summary.append(
             f"Average preference rank improved by {abs(delta_mean_rank)}."
+        )
+
+    # Compare worst individual preference rank
+    if delta_worst_rank > 0:
+        trade_off_summary.append(
+            f"Worst individual preference rank worsened by {delta_worst_rank}."
+        )
+    elif delta_worst_rank < 0:
+        trade_off_summary.append(
+            "Worst individual preference rank improved by "
+            f"{abs(delta_worst_rank)}."
         )
 
     # Compare changes count

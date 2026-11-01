@@ -8,6 +8,7 @@ from app import create_app
 from app.contract import contract
 from app.contract import mocks
 from app.domain import models
+from app.engine import strategies
 from app.persistence import repositories
 from app.samples import demo_data
 
@@ -1107,6 +1108,86 @@ def test_compare_same_cohort_across_runs_still_works(
 
     assert res.status_code == 200
     assert b"Changed Student Allocations" in res.data
+
+
+def test_compare_shows_worst_rank_delta(real_engine_client) -> None:
+    """The page shows the worst-rank change, signed as B minus A."""
+    run = _load_and_run(real_engine_client)
+    alt_1, alt_2 = run.solutions[0], run.solutions[1]
+    delta = (
+        alt_2.indicators["fairness"]["worst_rank"]
+        - alt_1.indicators["fairness"]["worst_rank"]
+    )
+    assert delta == 1
+
+    res = real_engine_client.get(f"/compare?sol1={alt_1.id}&sol2={alt_2.id}")
+
+    page = res.get_data(as_text=True)
+    card = page.split("&Delta; Worst Rank", maxsplit=1)[1].split(
+        "kpi-sub", maxsplit=1
+    )[0]
+    assert "text-danger" in card
+    assert "+1" in card
+    assert "Worst individual preference rank worsened by 1." in page
+
+
+def test_compare_shows_improved_worst_rank_as_good(real_engine_client) -> None:
+    """Swapping A and B flips the sign and the colour of the same change."""
+    run = _load_and_run(real_engine_client)
+    alt_1, alt_2 = run.solutions[0], run.solutions[1]
+
+    res = real_engine_client.get(f"/compare?sol1={alt_2.id}&sol2={alt_1.id}")
+
+    card = res.get_data(as_text=True).split(
+        "&Delta; Worst Rank", maxsplit=1
+    )[1].split("kpi-sub", maxsplit=1)[0]
+    assert "text-success" in card
+    assert "-1" in card
+
+
+def test_recommendations_do_not_claim_mathematical_optimality(
+    real_engine_client,
+) -> None:
+    """A recommendation is the best alternative of the run, nothing more."""
+    run = _load_and_run(real_engine_client)
+
+    res = real_engine_client.get(f"/recommendations/{run.id}")
+
+    assert res.status_code == 200
+    assert b"mathematically optimal" not in res.data
+    assert b"alternatives for that focus" in res.data
+
+
+def test_lock_and_rerun_stopped_by_time_limit_does_not_claim_infeasible(
+    real_engine_client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A rerun that stops without a proof warns without saying impossible."""
+    run = _load_and_run(real_engine_client)
+    assignment = run.solutions[0].assignments[0]
+    monkeypatch.setattr(
+        strategies._PyomoAssignmentStrategy,
+        "solve",
+        lambda *args, **kwargs: (
+            "TIME_LIMIT",
+            [],
+            None,
+            {"termination_condition": "maxTimeLimit"},
+        ),
+    )
+
+    res = real_engine_client.post(
+        f"/solutions/{run.solutions[0].id}/lock-and-rerun",
+        data={
+            "student_id": assignment.student_id,
+            "project_id": assignment.project_id,
+        },
+        follow_redirects=True,
+    )
+
+    assert res.status_code == 200
+    assert b"that the lock is impossible" in res.data
+    assert b"could not find a feasible solution" not in res.data
+    assert repositories.RunRepository().list_runs()[0].status == "FAILED"
 
 
 def test_compare_different_students_shows_message(real_engine_client) -> None:

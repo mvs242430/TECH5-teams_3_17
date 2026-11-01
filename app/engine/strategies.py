@@ -16,7 +16,7 @@ from pyomo.common.errors import PyomoException
 from app.config import Config
 from app.domain import models
 from app.engine import metrics
-from app.engine.solvers import AssignmentStrategy
+from app.engine.solvers import AssignmentStrategy, USABLE_SOLVER_STATUSES
 
 
 def _build_base_model(
@@ -106,8 +106,39 @@ def _build_base_model(
 
     model.objective = pyo.Objective(expr=0, sense=pyo.maximize)
     model.solver = pyo.SolverFactory("appsi_highs")
-    model.solver.config.time_limit = Config.PULP_TIME_LIMIT_SECONDS
     return model, model.x
+
+
+def _classify_solver_stop(result: Any) -> str:
+    """Translates a HiGHS stop into a status that claims only what was proved.
+
+    OPTIMAL and INFEASIBLE are proofs from the solver. A stop without a proof
+    is FEASIBLE when HiGHS holds an allocation, and otherwise TIME_LIMIT or
+    NOT_SOLVED, neither of which says anything about the model.
+
+    Args:
+        result: Pyomo solver results returned by the HiGHS solve call.
+
+    Returns:
+        One of "OPTIMAL", "INFEASIBLE", "FEASIBLE", "TIME_LIMIT", "NOT_SOLVED".
+    """
+    condition = result.solver.termination_condition
+    if condition == pyo.TerminationCondition.optimal:
+        return "OPTIMAL"
+    # All variables are binary, so the objective is bounded and "unbounded"
+    # cannot be the cause: infeasibleOrUnbounded can only mean infeasible.
+    if condition in (
+        pyo.TerminationCondition.infeasible,
+        pyo.TerminationCondition.infeasibleOrUnbounded,
+    ):
+        return "INFEASIBLE"
+    # HiGHS has no "feasible" stop of its own: a time-limit stop that holds
+    # an allocation arrives as maxTimeLimit with a stored solution.
+    if len(result.solution) > 0:
+        return "FEASIBLE"
+    if condition == pyo.TerminationCondition.maxTimeLimit:
+        return "TIME_LIMIT"
+    return "NOT_SOLVED"
 
 
 def _skill_fit(
@@ -156,6 +187,9 @@ class _PyomoAssignmentStrategy(AssignmentStrategy):
 
         Returns:
             A tuple of (solver_status, assignments, objective_value, diagnostics).
+            solver_status is "OPTIMAL" or "FEASIBLE" with assignments, or
+            "INFEASIBLE", "TIME_LIMIT" or "NOT_SOLVED" without them. Only
+            "INFEASIBLE" means that no allocation exists.
         """
         if not students or not projects:
             return (
@@ -210,10 +244,16 @@ class _PyomoAssignmentStrategy(AssignmentStrategy):
                 )
 
         try:
-            result = model.solver.solve(model, load_solutions=False)
+            # The legacy solve() overwrites solver.config.time_limit with this
+            # argument, so the limit only reaches HiGHS when passed here.
+            result = model.solver.solve(
+                model,
+                load_solutions=False,
+                timelimit=Config.PULP_TIME_LIMIT_SECONDS,
+            )
         except (PyomoException, RuntimeError, ValueError, OSError) as error:
             return (
-                "INFEASIBLE",
+                "NOT_SOLVED",
                 [],
                 None,
                 {
@@ -223,12 +263,10 @@ class _PyomoAssignmentStrategy(AssignmentStrategy):
                 },
             )
 
-        if result.solver.termination_condition not in (
-            pyo.TerminationCondition.optimal,
-            pyo.TerminationCondition.feasible,
-        ):
+        solver_status = _classify_solver_stop(result)
+        if solver_status not in USABLE_SOLVER_STATUSES:
             return (
-                "INFEASIBLE",
+                solver_status,
                 [],
                 None,
                 {
@@ -266,7 +304,7 @@ class _PyomoAssignmentStrategy(AssignmentStrategy):
                     break
 
         return (
-            "OPTIMAL",
+            solver_status,
             assignments,
             float(pyo.value(model.objective)),
             {

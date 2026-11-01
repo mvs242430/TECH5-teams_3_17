@@ -21,6 +21,9 @@ from app.domain import validation
 from app.engine import metrics
 from app.persistence import repositories
 
+# Solver statuses that come with an allocation the engine can use.
+USABLE_SOLVER_STATUSES = ("OPTIMAL", "FEASIBLE")
+
 
 class AssignmentStrategy(abc.ABC):
     """Abstract Base Class for student-to-project allocation strategies.
@@ -298,6 +301,8 @@ class AssignmentEngine(contract.AssignmentEngineContract):
         solutions: list[models.Solution] = []
         excluded_solutions: list[list[tuple[str, str]]] = []
         last_solver_diag: dict[str, Any] = {}
+        last_solver_status = "NOT_SOLVED"
+        unproven_alternatives: list[int] = []
 
         for alt_idx in range(max_alts):
             strat_key = strategy_order[alt_idx % len(strategy_order)]
@@ -309,8 +314,9 @@ class AssignmentEngine(contract.AssignmentEngineContract):
                 excluded_solutions=excluded_solutions,
             )
             last_solver_diag = sol_diag
+            last_solver_status = solver_status
 
-            if solver_status != "OPTIMAL" or not assignments:
+            if solver_status not in USABLE_SOLVER_STATUSES or not assignments:
                 # If switching strategy failed to find a new solution, try the
                 # primary strategy once more with the current no-good cuts.
                 if strat_key != primary_strategy:
@@ -328,8 +334,12 @@ class AssignmentEngine(contract.AssignmentEngineContract):
                     )
                     strat_key = primary_strategy
                     last_solver_diag = sol_diag
+                    last_solver_status = solver_status
 
-                if solver_status != "OPTIMAL" or not assignments:
+                if (
+                    solver_status not in USABLE_SOLVER_STATUSES
+                    or not assignments
+                ):
                     break
 
             indicators = metrics.compute_solution_indicators(
@@ -338,6 +348,13 @@ class AssignmentEngine(contract.AssignmentEngineContract):
                 assignments=assignments,
                 fixed_assignments=request.fixed_assignments,
             )
+            solution_warnings = list(val_outcome.warnings)
+            if solver_status == "FEASIBLE":
+                unproven_alternatives.append(len(solutions) + 1)
+                solution_warnings.append(
+                    "Solver stopped early: this allocation meets all hard "
+                    "constraints but is not proven optimal."
+                )
             sol = models.Solution(
                 id=str(uuid.uuid4()),
                 run_id=run_id,
@@ -348,7 +365,7 @@ class AssignmentEngine(contract.AssignmentEngineContract):
                 ),
                 assignments=assignments,
                 indicators=indicators,
-                warnings=list(val_outcome.warnings),
+                warnings=solution_warnings,
                 diagnostics=sol_diag,
             )
             solutions.append(sol)
@@ -359,8 +376,11 @@ class AssignmentEngine(contract.AssignmentEngineContract):
         elapsed = round(time.perf_counter() - start_time, 4)
 
         if not solutions:
+            # A time limit or a solver failure proves nothing about the model,
+            # so only a real proof may end the run as INFEASIBLE.
+            proved_infeasible = last_solver_status == "INFEASIBLE"
             reasons = list(val_outcome.infeasibility_reasons)
-            if not reasons:
+            if not reasons and proved_infeasible:
                 reasons = [
                     "Solver proved the MILP formulation infeasible under the "
                     "combined capacity, mandatory skill, and fixed-lock "
@@ -368,14 +388,27 @@ class AssignmentEngine(contract.AssignmentEngineContract):
                     "reducing project minimum capacities, or removing fixed "
                     "locks."
                 ]
+            elif not reasons:
+                reasons = [
+                    f"Solver stopped with status {last_solver_status} before "
+                    "finding an allocation. This does not prove that no "
+                    "allocation exists, so the run should be tried again."
+                ]
             run = models.AssignmentRun(
                 id=run_id,
                 created_at=created_at,
-                status=contract.RunStatus.INFEASIBLE.value,
+                status=(
+                    contract.RunStatus.INFEASIBLE.value
+                    if proved_infeasible
+                    else contract.RunStatus.FAILED.value
+                ),
                 configuration=config_dict,
                 solutions=[],
                 diagnostics={
-                    "solver_status": "INFEASIBLE",
+                    "solver_status": last_solver_status,
+                    "termination_condition": last_solver_diag.get(
+                        "termination_condition"
+                    ),
                     "strategy": primary_strategy,
                     "solve_time_seconds": elapsed,
                     "variables": last_solver_diag.get(
@@ -393,11 +426,32 @@ class AssignmentEngine(contract.AssignmentEngineContract):
                     "message": (
                         "Solver could not find a feasible allocation "
                         "satisfying all hard constraints."
+                        if proved_infeasible
+                        else "Solver stopped before finding an allocation."
                     ),
                 },
             )
             self.run_repo.save_run(run)
             return run
+
+        message = (
+            f"Optimization completed in {elapsed}s with "
+            f"{len(solutions)} distinct alternative(s)."
+        )
+        if unproven_alternatives:
+            unproven_names = ", ".join(
+                f"Alt {number}" for number in unproven_alternatives
+            )
+            message += f" Feasible but not proven optimal: {unproven_names}."
+        run_warnings = list(val_outcome.warnings)
+        # INFEASIBLE here means the no-good cuts used up every allocation, so
+        # the list is complete. Any other failed stop leaves that open.
+        if last_solver_status not in (*USABLE_SOLVER_STATUSES, "INFEASIBLE"):
+            run_warnings.append(
+                f"The search for more alternatives stopped with status "
+                f"{last_solver_status}, so further distinct alternatives may "
+                "exist."
+            )
 
         run = models.AssignmentRun(
             id=run_id,
@@ -406,7 +460,9 @@ class AssignmentEngine(contract.AssignmentEngineContract):
             configuration=config_dict,
             solutions=solutions,
             diagnostics={
-                "solver_status": "Optimal",
+                "solver_status": (
+                    "Feasible" if unproven_alternatives else "Optimal"
+                ),
                 "strategy": primary_strategy,
                 "solve_time_seconds": elapsed,
                 "variables": last_solver_diag.get("num_variables", num_vars),
@@ -417,12 +473,9 @@ class AssignmentEngine(contract.AssignmentEngineContract):
                 "alternatives_found": len(solutions),
                 "distinct_alternatives": len(solutions),
                 "reasons": [],
-                "warnings": list(val_outcome.warnings),
+                "warnings": run_warnings,
                 "notes": request.notes,
-                "message": (
-                    f"Optimization completed in {elapsed}s with "
-                    f"{len(solutions)} distinct alternative(s)."
-                ),
+                "message": message,
             },
         )
         self.run_repo.save_run(run)

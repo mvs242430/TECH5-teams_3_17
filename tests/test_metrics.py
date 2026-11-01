@@ -186,3 +186,92 @@ def test_solution_comparison() -> None:
     assert comp["delta_mean_skill_fit"] == 0.4
     assert comp["delta_mean_rank"] == 1.5
     assert comp["rank_worsened_count"] == 2
+
+
+def _solution_with_worst_rank(
+    solution_id: str, project_id: str, worst_rank: int
+) -> models.Solution:
+    """Builds a one-student solution carrying the given worst-rank indicator."""
+    return models.Solution(
+        id=solution_id,
+        run_id="run-1",
+        alternative_number=1,
+        strategy_name="PREFERENCE",
+        assignments=[
+            models.Assignment(
+                student_id="S1",
+                project_id=project_id,
+                preference_rank=worst_rank,
+            )
+        ],
+        indicators={"fairness": {"worst_rank": worst_rank}},
+    )
+
+
+def test_comparison_reports_worse_worst_rank() -> None:
+    """The worst-rank delta is B minus A and survives the RunComparison DTO."""
+    comp = metrics.compare_two_solutions(
+        _solution_with_worst_rank("sol-a", "P1", 1),
+        _solution_with_worst_rank("sol-b", "P2", 3),
+    )
+
+    assert comp["delta_metrics"]["worst_rank_delta"] == 2
+    assert (
+        "Worst individual preference rank worsened by 2."
+        in comp["trade_off_summary"]
+    )
+
+    comparison = models.RunComparison.from_dict(comp)
+    assert comparison.delta_metrics["worst_rank_delta"] == 2
+    assert comparison.to_dict()["delta_metrics"]["worst_rank_delta"] == 2
+
+
+def test_comparison_reports_better_worst_rank() -> None:
+    """A lower worst rank in B gives a negative delta and says it improved."""
+    comp = metrics.compare_two_solutions(
+        _solution_with_worst_rank("sol-a", "P1", 3),
+        _solution_with_worst_rank("sol-b", "P2", 1),
+    )
+
+    assert comp["delta_metrics"]["worst_rank_delta"] == -2
+    assert (
+        "Worst individual preference rank improved by 2."
+        in comp["trade_off_summary"]
+    )
+
+
+def test_comparison_worst_rank_counts_unranked_student() -> None:
+    """An unranked student counts one rank below the worst stated preference."""
+    student = models.Student(
+        id="S1",
+        display_name="S1",
+        preferences=[
+            models.Preference("S1", "P1", 1),
+            models.Preference("S1", "P2", 2),
+        ],
+    )
+    projects = [
+        models.Project(id="P1", title="P1", max_capacity=1),
+        models.Project(id="P2", title="P2", max_capacity=1),
+        models.Project(id="P3", title="P3", max_capacity=1),
+    ]
+    solutions = [
+        models.Solution(
+            id=f"sol-{project_id}",
+            run_id="run-1",
+            alternative_number=1,
+            strategy_name="PREFERENCE",
+            assignments=[assignment],
+            indicators=metrics.compute_solution_indicators(
+                [student], projects, [assignment]
+            ),
+        )
+        for project_id, assignment in (
+            ("P2", models.Assignment("S1", "P2", preference_rank=2)),
+            ("P3", models.Assignment("S1", "P3", preference_rank=None)),
+        )
+    ]
+
+    comp = metrics.compare_two_solutions(solutions[0], solutions[1])
+
+    assert comp["delta_metrics"]["worst_rank_delta"] == 1

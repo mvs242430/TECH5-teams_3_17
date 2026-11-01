@@ -1416,6 +1416,12 @@ def lock_and_rerun(solution_id: str) -> flask.Response:
             "Solver could not find a feasible solution with this lock.",
             "warning",
         )
+    elif new_run.status == "FAILED":
+        flask.flash(
+            "Solver stopped before finding a solution. This does not prove "
+            "that the lock is impossible.",
+            "warning",
+        )
 
     return flask.redirect(
         flask.url_for("visualization_web.view_run", run_id=new_run.id)
