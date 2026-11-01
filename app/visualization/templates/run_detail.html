@@ -38,12 +38,34 @@
           {% endfor %}
         </ul>
       {% endif %}
-      {% if run.diagnostics.get('errors') %}
+      {# X2: the engine copies infeasibility reasons into errors too, so only
+         list errors that are not already shown as reasons above. #}
+      {% set shown_reasons = run.diagnostics.get('reasons') or [] %}
+      {% set extra_errors = (run.diagnostics.get('errors') or [])
+                            | reject('in', shown_reasons) | list %}
+      {% if extra_errors %}
         <ul style="color: var(--danger); margin-left: 1.5rem; margin-bottom: 0.5rem;">
-          {% for err in run.diagnostics.get('errors') %}
+          {% for err in extra_errors %}
             <li>{{ err }}</li>
           {% endfor %}
         </ul>
+      {% endif %}
+      {% if run.status in ('INFEASIBLE', 'INVALID_INPUT') %}
+        {# X2: say where to go to fix the problem, not only what is wrong. #}
+        <div class="run-fix-hints" style="margin-top: 0.75rem; font-size: 0.88rem;">
+          <strong>What to change:</strong>
+          <ul style="margin-left: 1.5rem; margin-top: 0.25rem;">
+            <li>Too few or too many seats &rarr; edit min/max capacity on the
+              <a href="{{ url_for('visualization_web.list_projects') }}">Projects</a> page.</li>
+            <li>Too many students locked to one project, or a lock to a missing
+              student/project &rarr; remove locks on the
+              <a href="{{ url_for('visualization_web.list_fixed_assignments') }}">Fixed Locks</a> page.</li>
+            <li>Nobody has a must-have skill &rarr; lower the level or untick
+              "must-have" on the project, or update student skills on the
+              <a href="{{ url_for('visualization_web.list_students') }}">Students</a> page.</li>
+          </ul>
+          Then start a new run.
+        </div>
       {% endif %}
       {% if run.diagnostics.get('warnings') %}
         <div style="margin-top: 0.5rem;">
