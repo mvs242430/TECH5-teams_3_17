@@ -20,7 +20,7 @@ All Week 3 course requirements, end-to-end milestone capabilities, edge-case res
 | Week 3 Requirement | Status | Repository Evidence |
 | :--- | :---: | :--- |
 | **Resolve remaining edge cases across engine & UI** | ✅ **Done** | All 15 Section-13 edge cases pass in [`tests/test_edge_cases.py`](../../tests/test_edge_cases.py); input ID/seat boundary checks merged via [PR #48](https://github.com/mvs242430/TECH5-teams_3_17/pull/48); cross-cohort comparison & emptied-solution guards merged via [PR #50](https://github.com/mvs242430/TECH5-teams_3_17/pull/50); UI bad-data walkthrough documented in `X2` (`x2-bad-data-walkthrough`). |
-| **Ensure all 50+ automated tests pass (`pytest -v` with zero unexpected failures or regressions)** | ✅ **Done** | `.venv/bin/python -m pytest -v` $\rightarrow$ **`105 passed in 3.13s` (`0 failed`, `0 xfailed`)**, covering all 51 starter tests (including all 15 previously `xfailed` tasks) plus 54 unit, edge-case, and UI integration tests (plus 6 additional regression/E2E tests on branches `x2-bad-data-walkthrough` and `x3-end-to-end-test`). |
+| **Ensure all 50+ automated tests pass (`pytest -v` with zero unexpected failures or regressions)** | ✅ **Done** | `.venv/bin/python -m pytest -v` on branch `main` (commit `e4c5f97`) $\rightarrow$ **`145 passed in 4.25s` (`0 failed`, `0 xfailed`)**, covering all 51 starter tests (including all 15 previously `xfailed` tasks) plus 94 unit, edge-case, recommendation, and UI integration tests. The branches `x2-bad-data-walkthrough` and `x3-end-to-end-test` are not merged into `main`, so their tests are not in this count. |
 | **Complete the Analytical Note (`docs/analytical_note_template.md`)** | ✅ **Done** | Full **Pyomo + HiGHS** mathematical formulation, feasibility proofs, 4-pillar performance measures, assumptions, recommendation criteria, and analytical limitations delivered in **[`docs/analytical_note_template_filled.md`](../analytical_note_template_filled.md)** (summarized in Section 2 below). |
 | **Milestone: Full end-to-end functionality verified** *(data entry, run trigger, distinct alternative generation, comparison, transparent recommendations, fixed assignments, infeasibility handling)* | ✅ **Done** | Verified across all 7 end-to-end stages in live UI workflows and automated lifecycle tests ([`tests/test_component_integration.py`](../../tests/test_component_integration.py) and [`tests/test_visualization_component.py`](../../tests/test_visualization_component.py)); detailed stage-by-stage verification matrix in Section 3. |
 | **Prepare a reproducible demonstration** | ✅ **Done** | Deterministic 4-scenario live walkthrough (`standard`, `fixed`, `infeasible`, `conflicting`) + interactive **Lock & Rerun** + headless Python verification protocol documented in Section 5 with exact live Pyomo/HiGHS metrics. |
@@ -51,7 +51,7 @@ The formal Week 3 deliverable — **[`docs/analytical_note_template_filled.md`](
 | **1. Data Entry & RBAC** | Interactive CRUD forms for Skills (`/skills`), Projects with mandatory/soft skill matrix (`/projects`), Students with ranked preferences (`/students`), and Fixed Locks (`/fixed-assignments`); sticky form validation, dependency delete guards, and `Student Viewer` read-only enforcement. | `test_skills_crud_workflow`, `test_projects_crud_workflow`, `test_dashboard_and_crud_workflow`, `test_role_switcher` |
 | **2. Run Trigger** | Coordinator/Admin launches optimization (`POST /runs/trigger`) selecting primary strategy (`PREFERENCE`, `SKILL_FIT`, `BALANCED`) and `max_alternatives`; dispatches strongly typed `contract.RunRequest` in-process to `AssignmentEngine.execute_run`. | `test_scenario_loading_and_optimization_trigger`, `test_contract_execute_and_retrieval` |
 | **3. Distinct Alternative Generation** | Engine rotates strategies while appending linear integer no-good cuts ($\sum_{(s,p) \in A^{(j)}} x_{s,p} \le \|S\| - 1$); stops cleanly without duplicates if fewer feasible allocations exist. | `test_distinct_alternatives_generation`, `test_edge_case_14_single_feasible_solution`, `test_edge_case_15_duplicate_avoidance_no_good_cuts` |
-| **4. Side-by-Side Comparison** | `/compare` computes `RunComparison` via `engine.compare_solutions`, rendering 5 KPI delta cards ($\Delta$ Changed Students, $\Delta$ Skill Fit, $\Delta$ Mean Rank, $\Delta$ Gini, Rank Shifts), plain-language impact summary, and student-level reallocation table. | `test_compare_solutions_view`, `test_solution_comparison`, `test_compare_same_cohort_across_runs_still_works` |
+| **4. Side-by-Side Comparison** | `/compare` computes `RunComparison` via `engine.compare_solutions`, rendering 6 KPI delta cards ($\Delta$ Changed Students, $\Delta$ Skill Fit, $\Delta$ Mean Rank, $\Delta$ Worst Rank, $\Delta$ Gini, Rank Shifts), plain-language impact summary, and student-level reallocation table. | `test_compare_solutions_view`, `test_solution_comparison`, `test_compare_same_cohort_across_runs_still_works` |
 | **5. Transparent Recommendations** | `/recommendations/<run_id>` and quick-jump badges on `/runs/<run_id>` present 3 policy lenses with separated **Criteria**, **Calculated Evidence**, and **Administrative Advice**. | `test_full_lifecycle_integration` (`generate_recommendations` & UI rendering) |
 | **6. Fixed Assignments & Lock-and-Rerun** | Pre-allocated locks ($x_{s^*, p^*} = 1$) enforced across all alternatives; single-click `POST /solutions/<id>/lock-and-rerun` pins a student-project pair, preserves original strategy & `max_alternatives`, and re-solves immediately. | `test_fixed_assignment_preservation`, `test_lock_and_rerun_creates_exactly_one_fixed_assignment_and_preserves_strategy` |
 | **7. Infeasibility & Bad-Input Handling** | Pre-solver `validate_cohort` catches capacity deficits, minimum-quota excess, and contradictory locks; Pyomo `solve(..., load_solutions=False)` catches coupled MILP infeasibility without crashing and persists structured `diagnostics["reasons"]`. | `test_infeasible_cohort_integration`, `test_edge_case_7` through `test_edge_case_13` |
@@ -67,40 +67,42 @@ The formal Week 3 deliverable — **[`docs/analytical_note_template_filled.md`](
 
 ## 4. Automated Test Suite Verification (`pytest -v`)
 
-Running the complete test suite with `pytest -v` confirms **105 passing tests, 0 failures, and 0 `xfail` markers** (exceeding the 51 baseline tests with zero regressions):
+Running the complete test suite with `pytest -v` on branch `main` (commit `e4c5f97`) confirms **145 passing tests, 0 failures, and 0 `xfail` markers** (exceeding the 51 baseline tests with zero regressions):
 
 ```text
 $ .venv/bin/python -m pytest -v
 ============================= test session starts ==============================
 platform darwin -- Python 3.14.7, pytest-9.1.1, pluggy-1.7.0
-collected 105 items
+collected 145 items
 
 tests/test_component_integration.py::test_full_lifecycle_integration PASSED      [  0%]
 tests/test_component_integration.py::test_infeasible_cohort_integration PASSED   [  1%]
-tests/test_contract_and_engine.py (5 contract & substitutability tests) PASSED   [  6%]
-tests/test_edge_cases.py (15 Section-13 boundary & solver edge cases) PASSED     [ 20%]
-tests/test_metrics.py (6 skill-fit, Gini, indicator & delta tests) PASSED        [ 26%]
-tests/test_models.py (4 domain entity & serialization tests) PASSED              [ 30%]
-tests/test_persistence.py (3 SQLite 3NF schema, FK & repository tests) PASSED    [ 33%]
-tests/test_solvers.py (12 Pyomo/HiGHS MILP, strategies & cut tests) PASSED       [ 44%]
-tests/test_validation.py (6 cohort pre-solver validation tests) PASSED           [ 50%]
-tests/test_visualization_component.py (52 UI, RBAC, CRUD, compare & lock tests)  [100%]
+tests/test_contract_and_engine.py (5 contract & substitutability tests) PASSED   [  4%]
+tests/test_edge_cases.py (17 Section-13 boundary & solver edge cases) PASSED     [ 16%]
+tests/test_metrics.py (9 skill-fit, Gini, indicator & delta tests) PASSED        [ 22%]
+tests/test_models.py (4 domain entity & serialization tests) PASSED              [ 25%]
+tests/test_persistence.py (3 SQLite 3NF schema, FK & repository tests) PASSED    [ 27%]
+tests/test_recommendations.py (6 recommendation rule tests) PASSED               [ 31%]
+tests/test_solvers.py (29 Pyomo/HiGHS MILP, strategies, cut & stop tests) PASSED [ 51%]
+tests/test_validation.py (6 cohort pre-solver validation tests) PASSED           [ 55%]
+tests/test_visualization_component.py (64 UI, RBAC, CRUD, compare & lock tests)  [100%]
 
-============================= 105 passed in 3.13s ==============================
+============================= 145 passed in 4.25s ==============================
 ```
 
 | Test Module | Architectural Layer Verified | Passed | Failed / XFailed |
 | :--- | :--- | :---: | :---: |
-| [`tests/test_visualization_component.py`](../../tests/test_visualization_component.py) | Component A routes, RBAC, Skills/Projects/Students CRUD, sticky validation, `/compare` cohort guards, `/recommendations`, Lock & Rerun | `52` | `0` |
-| [`tests/test_edge_cases.py`](../../tests/test_edge_cases.py) | All 15 Section-13 edge cases (incomplete/tied preferences, zero skills/reqs, capacity deficits, mandatory skills, no-good cuts) | `15` | `0` |
-| [`tests/test_solvers.py`](../../tests/test_solvers.py) | Pyomo base MILP constraints, fixed locks, mandatory skill fixing, 3 strategies (`PREFERENCE`, `SKILL_FIT`, `BALANCED`), integer cuts | `12` | `0` |
-| [`tests/test_metrics.py`](../../tests/test_metrics.py) | Capped fractional skill fit, pairwise Gini index, 4-pillar solution indicators, pairwise solution comparison | `6` | `0` |
+| [`tests/test_visualization_component.py`](../../tests/test_visualization_component.py) | Component A routes, RBAC, Skills/Projects/Students CRUD, sticky validation, `/compare` cohort guards and $\Delta$ Worst Rank card, `/recommendations`, Lock & Rerun, `FAILED` and not-proven-optimal notices | `64` | `0` |
+| [`tests/test_edge_cases.py`](../../tests/test_edge_cases.py) | All 15 Section-13 edge cases (incomplete/tied preferences, zero skills/reqs, capacity deficits, mandatory skills, no-good cuts), plus 2 Edge Case 13 tests that reach HiGHS | `17` | `0` |
+| [`tests/test_solvers.py`](../../tests/test_solvers.py) | Pyomo base MILP constraints, fixed locks, mandatory skill fixing, 3 strategies (`PREFERENCE`, `SKILL_FIT`, `BALANCED`), integer cuts, solver stop statuses and the time limit | `29` | `0` |
+| [`tests/test_metrics.py`](../../tests/test_metrics.py) | Capped fractional skill fit, pairwise Gini index, 4-pillar solution indicators, pairwise solution comparison including the worst-rank delta | `9` | `0` |
 | [`tests/test_validation.py`](../../tests/test_validation.py) | Pre-solver structural validation and mathematical feasibility rules | `6` | `0` |
+| [`tests/test_recommendations.py`](../../tests/test_recommendations.py) | Lexicographic selection rules, tie-breaks, and `criteria_used` order for the 3 policy priorities | `6` | `0` |
 | [`tests/test_contract_and_engine.py`](../../tests/test_contract_and_engine.py) | `AssignmentEngineContract` ABC compliance, DTO validation, persistence, retrieval, and mock substitutability | `5` | `0` |
 | [`tests/test_models.py`](../../tests/test_models.py) | Domain dataclasses, invariants, and JSON serialization helpers | `4` | `0` |
 | [`tests/test_persistence.py`](../../tests/test_persistence.py) | SQLite 3NF schema, WAL mode, foreign-key cascades, and repository CRUD round-trips | `3` | `0` |
 | [`tests/test_component_integration.py`](../../tests/test_component_integration.py) | Full in-process lifecycle (seed $\rightarrow$ solve $\rightarrow$ compare $\rightarrow$ recommend $\rightarrow$ lock & rerun) and infeasible run flow | `2` | `0` |
-| **Total** | **All 4 Testing Layers (Unit, Persistence, Contract, Integration)** | **`105`** | **`0`** |
+| **Total** | **All 4 Testing Layers (Unit, Persistence, Contract, Integration)** | **`145`** | **`0`** |
 
 ---
 
@@ -126,8 +128,8 @@ Open **`http://127.0.0.1:5000`** in a browser (default role: `Administrator`; sw
 | :--- | :--- | :--- |
 | **Step 1: Data Entry & RBAC Check** | Visit **Skills** (`/skills`) and **Projects** (`/projects`) to inspect/add a skill or edit project requirements; switch role to `Student Viewer` to verify edit/trigger controls are blocked (`403` / permission warning), then switch back to `Programme Coordinator` or `Administrator`. | Relational updates persist immediately in SQLite (`instance/tech5_dss.db`); `Student Viewer` cannot mutate cohort data or launch runs. |
 | **Step 2: Scenario 1 — Standard Trade-Off Benchmark** | Go to **Scenarios** (`/scenarios`) $\rightarrow$ load **Standard Trade-Off Benchmark** (10 students `S01–S10`, 4 projects `P1–P4` with bounds `[1, 3]`, 12 seats) $\rightarrow$ trigger run with `PREFERENCE` and `3` alternatives. | Status **`COMPLETED`** (`< 0.05s`) with **3 distinct solutions**:<br>• **Alt #1 (`PREFERENCE`):** Mean Rank `1.00`, Worst Rank `1`, Gini `0.0000`, Skill Fit `98.3%`<br>• **Alt #2 (`SKILL_FIT`):** Mean Rank `1.20`, Worst Rank `2`, Gini `0.1333`, Skill Fit `100.0%`<br>• **Alt #3 (`BALANCED`):** Mean Rank `1.10`, Worst Rank `2`, Gini `0.0818`, Skill Fit `100.0%` |
-| **Step 3: Side-by-Side Comparison** | Click **Compare** (`/compare`) $\rightarrow$ compare **Alt #1 (`PREFERENCE`)** vs. **Alt #2 (`SKILL_FIT`)**. | Displays **$\Delta$ Mean Skill Fit `+1.7%`**, **$\Delta$ Mean Rank `+0.20`**, **$\Delta$ Gini `+0.1333`**, plain-language impact summary, and exact displaced students moving from rank 1 to rank 2. |
-| **Step 4: Transparent Recommendations** | From `/runs/<run_id>`, click **View Recommendations** (`/recommendations/<run_id>`). | Recommends **Alt #1** for *Student Preference Maximization* and *Balanced & Egalitarian Allocation* ($G = 0.0000, \bar{r} = 1.00$), and **Alt #2** for *Project Skill Quality* ($\bar{\sigma} = 100.0\%$, `0` unmet soft requirements), separating **Criteria**, **Evidence**, and **Policy Advice**. |
+| **Step 3: Side-by-Side Comparison** | Click **Compare** (`/compare`) $\rightarrow$ compare **Alt #1 (`PREFERENCE`)** vs. **Alt #2 (`SKILL_FIT`)**. | Displays **$\Delta$ Mean Skill Fit `+1.7%`**, **$\Delta$ Mean Rank `+0.20`**, **$\Delta$ Worst Rank `+1`**, **$\Delta$ Gini `+0.1333`**, plain-language impact summary, and exact displaced students moving from rank 1 to rank 2. |
+| **Step 4: Transparent Recommendations** | From `/runs/<run_id>`, click **View Recommendations** (`/recommendations/<run_id>`). | Recommends **Alt #1** for *Student Preference Maximization* and *Balanced & Egalitarian Allocation* ($G = 0.0000, \bar{r} = 1.00$), and **Alt #3** for *Project Skill Quality* ($\bar{\sigma} = 100.0\%$, `0` unmet soft requirements, like Alt #2, and the better mean rank, $\bar{r} = 1.10$ against $1.20$), separating **Criteria**, **Evidence**, and **Policy Advice**. |
 | **Step 5: Scenario 2 & Interactive Lock & Rerun** | Load **Fixed Assignment Scenario** (`S02` locked to `P2`) and run; or open any solution (`/solutions/<id>`), choose a student-project pair in **Lock & Rerun**, and submit. | `S02` $\rightarrow$ `P2` (`Fixed` badge) holds across **all 3 generated alternatives**; interactive **Lock & Rerun** saves the new `APPROVED` lock, preserves the original strategy, and immediately solves a new run showing peer ripple effects. |
 | **Step 6: Scenarios 3 & 4 — Infeasibility & Contradictory Locks** | Load **Capacity Deficit** (`10 students > 6 seats`) and launch a run; then load **Contradictory Fixed Assignments** (`4` students locked to `P1` with `max_capacity = 3`) and launch a run. | Both runs terminate safely as **`INFEASIBLE`** with `0` corrupt solutions and explicit diagnostic messages (*"Insufficient overall capacity: total cohort size (10) exceeds aggregate maximum project capacity (6)"* and *"Fixed assignments (4) for project 'P1' exceed its maximum capacity (3)"*). |
 
@@ -170,4 +172,4 @@ print(run.status, len(run.solutions))  # COMPLETED 3
 ### 6.2 How We Used & Verified AI Tools in Week 3
 - **Code-to-Math Verification for the Analytical Note:** We cross-checked every equation in [`docs/analytical_note_template_filled.md`](../analytical_note_template_filled.md) line-by-line against [`strategies.py`](../../app/engine/strategies.py), [`solvers.py`](../../app/engine/solvers.py), [`metrics.py`](../../app/engine/metrics.py), and [`recommendations.py`](../../app/engine/recommendations.py)—updating an earlier Week 1 `PuLP/CBC` draft so that solver bindings (`appsi_highs`), unranked penalties ($-2R$, $-1.0$, $\rho = r_{\text{max\_stated}} + 1$), and strategy objectives match our real Python implementation 100%.
 - **Adversarial Bad-Data & Regression Testing:** AI pair-programming helped script Flask test-client walkthroughs across bad inputs (`X2`, `A2.1.1`, `a1-input-fixes`), exposing cohort-mismatch edge cases on `/compare` and duplicate reason lines on failed runs; every fix was paired with dedicated `pytest` assertions without weakening any existing starter test.
-- **Human Verification:** All test suites (`105 passed`), live benchmark metrics across the 4 scenarios, and headless contract snippets were executed and verified directly against the local SQLite and Pyomo/HiGHS runtime.
+- **Human Verification:** All test suites (`145 passed` on `main`), live benchmark metrics across the 4 scenarios, and headless contract snippets were executed and verified directly against the local SQLite and Pyomo/HiGHS runtime.
