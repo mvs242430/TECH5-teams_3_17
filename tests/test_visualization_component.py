@@ -1,6 +1,7 @@
 """Tests for Component A (Visualization & Recommendation) web workflows."""
 
 import pathlib
+from typing import Any
 
 import pytest
 
@@ -1188,6 +1189,181 @@ def test_lock_and_rerun_stopped_by_time_limit_does_not_claim_infeasible(
     assert b"that the lock is impossible" in res.data
     assert b"could not find a feasible solution" not in res.data
     assert repositories.RunRepository().list_runs()[0].status == "FAILED"
+
+
+def _lock_first_assignment(client: Any, run: models.AssignmentRun) -> Any:
+    """Posts Lock & Rerun for the first assignment of the first solution."""
+    solution = run.solutions[0]
+    return client.post(
+        f"/solutions/{solution.id}/lock-and-rerun",
+        data={
+            "student_id": solution.assignments[0].student_id,
+            "project_id": solution.assignments[0].project_id,
+        },
+        follow_redirects=True,
+    )
+
+
+def _assert_rerun_is_not_reported_as_success(page: bytes) -> None:
+    """Checks that a rerun with no solution warns and shows the saved lock."""
+    assert b"students changed" not in page
+    assert b"Compare with previous run" not in page
+    assert b"alert-success" not in page
+    assert b"is still locked to Project" in page
+    assert b"Review fixed locks" in page
+
+
+@pytest.mark.parametrize(
+    ("solver_status", "run_status", "expected_warning"),
+    [
+        ("TIME_LIMIT", "FAILED", b"that the lock is impossible"),
+        ("INFEASIBLE", "INFEASIBLE", b"could not find a feasible solution"),
+    ],
+)
+def test_lock_and_rerun_without_solution_is_not_a_success(
+    real_engine_client,
+    monkeypatch: pytest.MonkeyPatch,
+    solver_status: str,
+    run_status: str,
+    expected_warning: bytes,
+) -> None:
+    """A rerun that ends in the solver with no allocation only warns."""
+    run = _load_and_run(real_engine_client)
+    monkeypatch.setattr(
+        strategies._PyomoAssignmentStrategy,
+        "solve",
+        lambda *args, **kwargs: (solver_status, [], None, {}),
+    )
+
+    res = _lock_first_assignment(real_engine_client, run)
+
+    assert repositories.RunRepository().list_runs()[0].status == run_status
+    assert expected_warning in res.data
+    _assert_rerun_is_not_reported_as_success(res.data)
+
+
+def test_lock_and_rerun_over_capacity_is_not_a_success(
+    real_engine_client,
+) -> None:
+    """A real lock that overfills a project only warns."""
+    solution = _load_and_run(real_engine_client).solutions[0]
+    project = repositories.ProjectRepository().list_all()[0]
+    student_ids = [s.id for s in repositories.StudentRepository().list_all()]
+    fixed_repo = repositories.FixedAssignmentRepository()
+    for student_id in student_ids[: project.max_capacity]:
+        fixed_repo.save(
+            models.FixedAssignment(
+                student_id=student_id,
+                project_id=project.id,
+                status="APPROVED",
+                reason="Fills the project for this test.",
+            )
+        )
+
+    res = real_engine_client.post(
+        f"/solutions/{solution.id}/lock-and-rerun",
+        data={
+            "student_id": student_ids[project.max_capacity],
+            "project_id": project.id,
+        },
+        follow_redirects=True,
+    )
+
+    assert repositories.RunRepository().list_runs()[0].status == "INFEASIBLE"
+    assert b"could not find a feasible solution" in res.data
+    _assert_rerun_is_not_reported_as_success(res.data)
+
+
+def test_failed_run_page_does_not_blame_constraints(
+    real_engine_client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A run with no proof says so, and does not point at the constraints."""
+    real_engine_client.post("/load-scenario/standard", follow_redirects=True)
+    monkeypatch.setattr(
+        strategies._PyomoAssignmentStrategy,
+        "solve",
+        lambda *args, **kwargs: ("TIME_LIMIT", [], None, {}),
+    )
+
+    run = _run_engine(real_engine_client)
+    res = real_engine_client.get(f"/runs/{run.id}")
+
+    assert run.status == "FAILED"
+    assert b"Review constraint diagnostics" not in res.data
+    assert b"does not mean the constraints are wrong" in res.data
+
+
+def test_infeasible_run_page_still_points_to_constraints(
+    real_engine_client,
+) -> None:
+    """An infeasible run keeps the pointer to its constraint diagnostics."""
+    run = _load_and_run(real_engine_client, "infeasible")
+
+    res = real_engine_client.get(f"/runs/{run.id}")
+
+    assert run.status == "INFEASIBLE"
+    assert b"Review constraint diagnostics" in res.data
+
+
+def _stop_early_on_solve(
+    monkeypatch: pytest.MonkeyPatch, solve_number: int
+) -> None:
+    """Makes one solve of a run stop early, keeping its real allocation."""
+    real_solve = strategies._PyomoAssignmentStrategy.solve
+    solves_done: list[int] = []
+
+    def solve(self, *args: Any, **kwargs: Any) -> Any:
+        solves_done.append(1)
+        status, assignments, objective, diagnostics = real_solve(
+            self, *args, **kwargs
+        )
+        if len(solves_done) == solve_number:
+            status = "FEASIBLE"
+            diagnostics = {
+                **diagnostics,
+                "termination_condition": "maxTimeLimit",
+            }
+        return status, assignments, objective, diagnostics
+
+    monkeypatch.setattr(strategies._PyomoAssignmentStrategy, "solve", solve)
+
+
+def test_solution_page_warns_only_on_unproven_solution(
+    real_engine_client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only the alternative that stopped early carries the warning."""
+    _stop_early_on_solve(monkeypatch, solve_number=2)
+    run = _load_and_run(real_engine_client)
+    proven, unproven = run.solutions[0], run.solutions[1]
+
+    proven_res = real_engine_client.get(f"/solutions/{proven.id}")
+    unproven_res = real_engine_client.get(f"/solutions/{unproven.id}")
+
+    assert b"not proven optimal" not in proven_res.data
+    assert b"not proven optimal" in unproven_res.data
+
+
+def test_recommendations_name_unproven_alternatives(
+    real_engine_client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The recommendations page names the alternative that stopped early."""
+    _stop_early_on_solve(monkeypatch, solve_number=2)
+    run = _load_and_run(real_engine_client)
+
+    res = real_engine_client.get(f"/recommendations/{run.id}")
+
+    assert b"Not proven optimal: Alt 2." in res.data
+
+
+def test_proven_run_has_no_unproven_notes(real_engine_client) -> None:
+    """A normal run shows no unproven note on either page."""
+    run = _load_and_run(real_engine_client)
+
+    solution_res = real_engine_client.get(f"/solutions/{run.solutions[0].id}")
+    recommendations_res = real_engine_client.get(f"/recommendations/{run.id}")
+
+    assert b"not proven optimal" not in solution_res.data
+    assert b"Not proven optimal" not in recommendations_res.data
 
 
 def test_compare_different_students_shows_message(real_engine_client) -> None:
