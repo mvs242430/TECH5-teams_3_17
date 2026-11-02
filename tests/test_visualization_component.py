@@ -1498,7 +1498,9 @@ def _run_ids() -> list[str]:
 
 
 @pytest.mark.parametrize("role", ["COORDINATOR", "STUDENT"])
-def test_clear_data_is_denied_for_non_admin(standard_client, role) -> None:
+def test_clear_data_is_denied_for_non_admin(
+    standard_client, role: str
+) -> None:
     """Only the Administrator may wipe the cohort; the data stays."""
     students_before = _student_ids()
     projects_before = len(repositories.ProjectRepository().list_all())
@@ -1509,6 +1511,7 @@ def test_clear_data_is_denied_for_non_admin(standard_client, role) -> None:
 
     assert res.status_code == 200
     assert PERMISSION_DENIED in res.data
+    assert res.request.path == "/"
     assert _student_ids() == students_before
     assert len(repositories.ProjectRepository().list_all()) == projects_before
 
@@ -1526,7 +1529,9 @@ def test_clear_data_still_works_for_admin(standard_client) -> None:
 
 
 @pytest.mark.parametrize("role", ["COORDINATOR", "STUDENT"])
-def test_load_scenario_is_denied_for_non_admin(standard_client, role) -> None:
+def test_load_scenario_is_denied_for_non_admin(
+    standard_client, role: str
+) -> None:
     """Loading a scenario first wipes the cohort, so only the Admin may."""
     # A student that no scenario contains shows whether the wipe ran.
     repositories.StudentRepository().save(
@@ -1539,6 +1544,7 @@ def test_load_scenario_is_denied_for_non_admin(standard_client, role) -> None:
 
     assert res.status_code == 200
     assert PERMISSION_DENIED in res.data
+    assert res.request.path == "/"
     assert _student_ids() == students_before
     assert repositories.FixedAssignmentRepository().list_all() == []
 
@@ -1558,6 +1564,21 @@ def test_load_scenario_still_works_for_admin(standard_client) -> None:
     assert len(repositories.FixedAssignmentRepository().list_all()) == 1
 
 
+def test_load_unknown_scenario_keeps_cohort(standard_client) -> None:
+    """A mistyped scenario name is refused before anything is deleted."""
+    students_before = _student_ids()
+    projects_before = len(repositories.ProjectRepository().list_all())
+    assert students_before and projects_before
+    _switch_role(standard_client, "ADMIN")
+
+    res = standard_client.post("/load-scenario/typo", follow_redirects=True)
+
+    assert res.status_code == 200
+    assert b"Unknown scenario" in res.data
+    assert _student_ids() == students_before
+    assert len(repositories.ProjectRepository().list_all()) == projects_before
+
+
 def test_clear_solutions_is_denied_for_student_viewer(standard_client) -> None:
     """A Student Viewer cannot delete runs; the saved run stays."""
     runs_before = _run_ids()
@@ -1568,12 +1589,13 @@ def test_clear_solutions_is_denied_for_student_viewer(standard_client) -> None:
 
     assert res.status_code == 200
     assert PERMISSION_DENIED in res.data
+    assert res.request.path == "/"
     assert _run_ids() == runs_before
 
 
 @pytest.mark.parametrize("role", ["ADMIN", "COORDINATOR"])
 def test_clear_solutions_still_works_for_run_roles(
-    standard_client, role
+    standard_client, role: str
 ) -> None:
     """Roles that can create runs can delete them; the cohort stays."""
     students_before = _student_ids()
@@ -1596,7 +1618,10 @@ def test_clear_solutions_still_works_for_run_roles(
     ],
 )
 def test_delete_buttons_shown_only_to_allowed_roles(
-    standard_client, role, sees_cohort_buttons, sees_clear_solutions
+    standard_client,
+    role: str,
+    sees_cohort_buttons: bool,
+    sees_clear_solutions: bool,
 ) -> None:
     """Dashboard and scenarios pages hide buttons the role cannot use."""
     _switch_role(standard_client, role)

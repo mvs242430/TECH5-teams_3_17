@@ -1143,9 +1143,6 @@ def load_scenario(scenario_name: str) -> flask.Response:
         flask.flash("Permission denied for current role.", "danger")
         return flask.redirect(flask.url_for("visualization_web.dashboard"))
 
-    repo_run = repositories.RunRepository()
-    repo_run.clear_all_cohort_data()
-
     if scenario_name == "standard":
         data = demo_data.get_standard_scenario()
     elif scenario_name == "fixed":
@@ -1157,6 +1154,10 @@ def load_scenario(scenario_name: str) -> flask.Response:
     else:
         flask.flash(f"Unknown scenario: '{scenario_name}'.", "warning")
         return flask.redirect(flask.url_for("visualization_web.scenarios_page"))
+
+    # Wipe only once the name is known, so a typo deletes nothing.
+    repo_run = repositories.RunRepository()
+    repo_run.clear_all_cohort_data()
 
     skill_repo = repositories.SkillRepository()
     for s in data["skills"]:

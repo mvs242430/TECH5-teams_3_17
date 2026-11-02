@@ -38,7 +38,7 @@ This work has no file in `docs/team_related/issues/`, so this file uses the topi
 1. **Request:** The browser sends `POST /clear-data` (or one of the other two).
 2. **Role lookup:** The route calls `auth.can_edit_cohort_data()` or `auth.can_trigger_optimization()`. These read the role from the Flask session (`get_current_role()`).
 3. **Refused:** If the role is not allowed, the route flashes "Permission denied for current role." as `danger` and redirects to the dashboard. No repository method is called, so nothing is deleted.
-4. **Allowed:** Otherwise the route runs exactly as before and calls `RunRepository().clear_all_cohort_data()` or `clear_all_current_solutions()`.
+4. **Allowed:** Otherwise the route goes on and calls `RunRepository().clear_all_cohort_data()` or `clear_all_current_solutions()`. `load_scenario` first checks the scenario name and wipes only when the name is known (see Section 6).
 5. **Templates:** The context processor `inject_template_globals` already passes `can_edit` and `can_optimize` to every template. The templates use them to decide which buttons to draw:
    - `dashboard.html`: the three quick benchmark buttons need `can_edit`. Roles without it see a short notice instead, like the existing notice on the "Launch Optimization Run" panel. The "Delete Solutions" card needs `can_optimize`. The "click Standard Trade-Off Benchmark above" hint in the empty run list is only shown to roles that can see that button.
    - `scenarios.html`: the four "Load …" buttons and the "Database Reset" card need `can_edit`. The scenario descriptions stay visible to everyone, with one notice at the top that explains why the buttons are missing.
@@ -81,7 +81,7 @@ New tests (all use the `standard_client` fixture: standard benchmark plus one sa
 
 ### Known limits and follow-ups
 
-- **A mistyped scenario name still wipes the cohort.** `load_scenario` calls `clear_all_cohort_data()` before it checks the name, so an Admin posting `/load-scenario/typo` loses all students (10 → 0) and then sees "Unknown scenario". This is an input-validation order problem, not a role problem, so it is not fixed here. The fix is to look up the scenario first and wipe only when the name is known.
+- **A mistyped scenario name wiped the cohort.** Fixed later on the same branch, see Section 6.
 - **Docs and code disagree about fixed assignments.** `docs/architecture.md` says the Coordinator "can manage fixed assignment locks", but the fixed-assignment routes use `can_edit_cohort_data()` (Admin only). This belongs to A2.4's "Role × Action" table.
 - **The rest of A2.4** (every POST route, one parametrised viewer test) is still open.
 
@@ -96,3 +96,43 @@ New tests (all use the `standard_client` fixture: standard benchmark plus one sa
 5. *How does the template know the role?* (`inject_template_globals` in `routes.py` passes `can_edit` and `can_optimize` to every template from the same `auth` helpers the routes use, so the buttons and the routes always agree.)
 
 > **Pedagogical Checkpoint:** *"If you cannot explain every line, ask me to teach you before accepting or committing."*
+
+---
+
+## 6. Updates Made: A Mistyped Scenario Name No Longer Wipes the Cohort
+
+### The bug
+
+`load_scenario` called `clear_all_cohort_data()` first and only then checked the scenario name. An Admin posting `/load-scenario/typo` lost every student (10 → 0 on a throwaway database) and then saw "Unknown scenario". This is not a role problem, because the Admin is allowed to load scenarios. The input was simply checked after the data was already gone.
+
+### Pattern and fix
+
+- **Pattern Applied:** *Validate before mutate.* It is the same idea as the role guard in Section 1: check everything that can make the request fail before changing the database.
+- **Fix:** In `load_scenario` the two lines that wipe the cohort moved from before the `if scenario_name == ...` chain to after it. An unknown name now returns at the `else:` branch before anything is deleted. A known name wipes and loads exactly as before.
+- **Why this is safe:** The `demo_data.get_*_scenario()` functions only build objects in memory (`app/samples/demo_data.py` imports no repository and opens no database), so running them before the wipe changes nothing else.
+
+The order of steps in `load_scenario` is now:
+
+1. Role check (`can_edit_cohort_data()`), refuse if not allowed.
+2. Scenario lookup by name, refuse with "Unknown scenario" if not found.
+3. Wipe the cohort.
+4. Save the scenario's skills, projects, students and fixed assignments.
+
+### Files changed
+
+| File Path | Modification Description |
+| :--- | :--- |
+| `app/visualization/routes.py` | `load_scenario`: the wipe moved after the scenario lookup. |
+| `tests/test_visualization_component.py` | New `test_load_unknown_scenario_keeps_cohort`: as Admin, posts `/load-scenario/typo` and checks the message and that every student is still there. |
+
+### Verification
+
+- `.venv/bin/python -m pytest -q` → `158 passed` (157 + 1 new).
+- The new test fails on the previous commit of this branch (`e855583`), which had the role check but still wiped before the lookup.
+- **Independent QA (`qa-tester`):** **PASS**, no blocking findings. On `origin/main` the 13 new tests give `8 failed, 5 passed` (the 5 are the "still works" cases); on `e855583` only the new typo test fails. Its suggestions were applied afterwards: type hints on the parametrized test arguments, a check that refused requests land on the dashboard (`res.request.path == "/"`), a project-count check in the typo test, and a corrected sentence in Section 2. The suite still gives `158 passed`.
+- Pages were checked through the Flask test client, not in a browser.
+
+### Check your understanding
+
+1. *Why is it enough to move two lines, without writing a separate "is this name valid?" check?* (The `if ... elif ... else` chain already is that check. Its `else:` branch returns early, so anything placed after the chain only runs for a known name.)
+2. *Why was this bug not caught by the role tests?* (Those tests use valid names. A bad name from an allowed role is a different input, so it needs its own test.)
