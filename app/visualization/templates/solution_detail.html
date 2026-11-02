@@ -90,7 +90,7 @@
             <th>Preference Rank</th>
             <th>Skill Fit Match</th>
             <th>Status / Unmet Skills</th>
-            {% if can_optimize %}<th>Interactive Rerun</th>{% endif %}
+            {% if can_optimize and can_manage_locks %}<th>Interactive Rerun</th>{% endif %}
           </tr>
         </thead>
         <tbody>
@@ -143,7 +143,7 @@
                   <span style="color: var(--success); font-size: 0.85rem;">&#10003; Full Fit</span>
                 {% endif %}
               </td>
-              {% if can_optimize %}
+              {% if can_optimize and can_manage_locks %}
                 <td>
                   {% if not asg.is_fixed %}
                     <form action="{{ url_for('visualization_web.lock_and_rerun', solution_id=solution.id) }}" method="POST" onsubmit="return confirm('Are you sure you want to lock student {{ asg.student_id }} to project {{ asg.project_id }} and re-run optimization?');">

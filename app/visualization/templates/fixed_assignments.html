@@ -23,7 +23,7 @@
                 <th>Designated Project</th>
                 <th>Status</th>
                 <th>Reason / Justification</th>
-                {% if can_edit %}<th>Action</th>{% endif %}
+                {% if can_manage_locks %}<th>Action</th>{% endif %}
               </tr>
             </thead>
             <tbody>
@@ -33,7 +33,7 @@
                   <td><span class="badge badge-primary">{{ fa.project_id }}</span></td>
                   <td><span class="badge badge-success">{{ fa.status }}</span></td>
                   <td><small>{{ fa.reason or 'Administrative allocation' }}</small></td>
-                  {% if can_edit %}
+                  {% if can_manage_locks %}
                     <td>
                       <form action="{{ url_for('visualization_web.delete_fixed_assignment', student_id=fa.student_id) }}" method="POST" onsubmit="return confirm('Remove fixed assignment for student {{ fa.student_id }}?');">
                         <button type="submit" class="btn btn-sm btn-danger">Release</button>
@@ -58,7 +58,7 @@
       <h2 class="card-title">+ Add Fixed Assignment Constraint</h2>
     </div>
     <div class="card-body">
-      {% if can_edit %}
+      {% if can_manage_locks %}
         <form action="{{ url_for('visualization_web.create_fixed_assignment') }}" method="POST">
           <div class="form-group">
             <label class="form-label" for="student_id">Select Student:</label>
@@ -100,7 +100,8 @@
         </form>
       {% else %}
         <div class="alert alert-warning">
-          Only Administrators can add or remove fixed assignment constraints.
+          Current role (<strong>{{ current_role }}</strong>) can view fixed assignments but cannot change them.
+          Only Administrators and Programme Coordinators can add or release fixed assignment constraints.
         </div>
       {% endif %}
     </div>

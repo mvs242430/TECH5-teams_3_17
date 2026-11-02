@@ -44,6 +44,7 @@ def inject_template_globals() -> dict[str, Any]:
         "all_roles": auth.UserRole.ALL_ROLES,
         "can_edit": auth.can_edit_cohort_data(),
         "can_optimize": auth.can_trigger_optimization(),
+        "can_manage_locks": auth.can_manage_fixed_assignments(),
     }
 
 
@@ -469,7 +470,7 @@ def update_student(student_id: str) -> flask.Response:
 def delete_student(student_id: str) -> flask.Response:
     """Deletes a student."""
     if not auth.can_edit_cohort_data():
-        flask.flash("Permission denied.", "danger")
+        flask.flash("Permission denied for current role.", "danger")
         return flask.redirect(flask.url_for("visualization_web.list_students"))
 
     repositories.StudentRepository().delete(student_id)
@@ -1083,8 +1084,9 @@ def list_fixed_assignments() -> str:
 def create_fixed_assignment() -> flask.Response:
     """Locks a student to a designated project."""
     target = flask.url_for("visualization_web.list_fixed_assignments")
-    if not auth.can_edit_cohort_data():
-        flask.flash("Permission denied.", "danger")
+    # Locks are solver inputs, so Admin and Coordinator manage them.
+    if not auth.can_manage_fixed_assignments():
+        flask.flash("Permission denied for current role.", "danger")
         return flask.redirect(target)
 
     s_id = flask.request.form.get("student_id", "").strip()
@@ -1113,8 +1115,8 @@ def create_fixed_assignment() -> flask.Response:
 def delete_fixed_assignment(student_id: str) -> flask.Response:
     """Removes a locked allocation."""
     target = flask.url_for("visualization_web.list_fixed_assignments")
-    if not auth.can_edit_cohort_data():
-        flask.flash("Permission denied.", "danger")
+    if not auth.can_manage_fixed_assignments():
+        flask.flash("Permission denied for current role.", "danger")
         return flask.redirect(target)
 
     repositories.FixedAssignmentRepository().delete(student_id)
@@ -1337,7 +1339,12 @@ def _flash_rerun_without_solution(
 @web_bp.post("/solutions/<solution_id>/lock-and-rerun")
 def lock_and_rerun(solution_id: str) -> flask.Response:
     """Locks a student assignment from a solution and triggers a new run."""
-    if not auth.can_trigger_optimization():
+    # This route saves a fixed lock and then runs the solver, so the role
+    # needs both rights.
+    if not (
+        auth.can_manage_fixed_assignments()
+        and auth.can_trigger_optimization()
+    ):
         flask.flash("Permission denied for current role.", "danger")
         return flask.redirect(flask.url_for("visualization_web.dashboard"))
 

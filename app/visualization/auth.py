@@ -59,3 +59,17 @@ def can_trigger_optimization() -> bool:
         True if user can run solver.
     """
     return get_current_role() in (UserRole.ADMIN, UserRole.COORDINATOR)
+
+
+def can_manage_fixed_assignments() -> bool:
+    """Checks whether the current user may create or release fixed locks.
+
+    Fixed assignments are solver inputs that the Programme Coordinator
+    manages alongside runs (docs/architecture.md, section 6). This is a
+    separate rule from running the solver, so a later change to one does
+    not silently change the other.
+
+    Returns:
+        True if the current role may create or release fixed assignments.
+    """
+    return get_current_role() in (UserRole.ADMIN, UserRole.COORDINATOR)
