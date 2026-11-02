@@ -1136,6 +1136,13 @@ def scenarios_page() -> str:
 @web_bp.post("/load-scenario/<scenario_name>")
 def load_scenario(scenario_name: str) -> flask.Response:
     """Populates database with a designated reproducible benchmark cohort."""
+    # Loading replaces the whole cohort, so it needs cohort edit rights.
+    # The check runs before the wipe below, so a refused request deletes
+    # nothing.
+    if not auth.can_edit_cohort_data():
+        flask.flash("Permission denied for current role.", "danger")
+        return flask.redirect(flask.url_for("visualization_web.dashboard"))
+
     repo_run = repositories.RunRepository()
     repo_run.clear_all_cohort_data()
 
@@ -1178,6 +1185,10 @@ def load_scenario(scenario_name: str) -> flask.Response:
 @web_bp.post("/clear-data")
 def clear_data() -> flask.Response:
     """Clears all cohort and constraint data."""
+    if not auth.can_edit_cohort_data():
+        flask.flash("Permission denied for current role.", "danger")
+        return flask.redirect(flask.url_for("visualization_web.dashboard"))
+
     repositories.RunRepository().clear_all_cohort_data()
     flask.flash("All cohort data cleared.", "info")
     return flask.redirect(flask.url_for("visualization_web.dashboard"))
@@ -1455,6 +1466,12 @@ def lock_and_rerun(solution_id: str) -> flask.Response:
 @web_bp.post("/clear-solutions")
 def clear_solutions() -> flask.Response:
     """Clears all solutions in the current run."""
+    # Runs and solutions belong to whoever may create them (Admin and
+    # Coordinator); cohort data is not touched here.
+    if not auth.can_trigger_optimization():
+        flask.flash("Permission denied for current role.", "danger")
+        return flask.redirect(flask.url_for("visualization_web.dashboard"))
+
     repositories.RunRepository().clear_all_current_solutions()
     flask.flash("All solutions cleared.", "info")
     return flask.redirect(flask.url_for("visualization_web.dashboard"))
