@@ -169,7 +169,7 @@ The coordinator chooses a main strategy and how many solutions to generate (1 to
 2. It saves skills, projects, students and fixed assignments to the database.
 3. It solves once for each solution. The first solve uses the main strategy, the next two use the other strategies, and then the order repeats.
 4. After each solve, it calculates the indicators and adds a no-good cut for that solution. All cuts stay in place for the later solves.
-5. If a strategy finds nothing, it tries the main strategy once more. If that also fails, it stops. With no solutions at all, the run is `INFEASIBLE`. Otherwise it returns the solutions it found.
+5. If a strategy finds nothing, it tries the main strategy once more. If that also fails, it stops. With no solutions at all, the run is `INFEASIBLE` only if HiGHS proved that no allocation exists. If the solver stopped without such a proof, for example at the time limit, the run is `FAILED`, because nothing was proved about the rules. Otherwise it returns the solutions it found. If the search for more solutions stopped without a proof, the run also warns that more solutions may exist.
 
 **Demo result** (10 students, 4 projects with 1–3 seats each, main strategy `PREFERENCE`):
 
@@ -266,7 +266,7 @@ A positive $\Delta \bar{\sigma}$ is good, because skill fit improves. A positive
 
 **Example:** Going from Alt 1 to Alt 2 gives $\Delta \bar{\sigma} = +0.0167$, $\Delta \bar{r} = +0.20$, $\Delta r_{\max} = +1$ and $\Delta G = +0.1333$. Skill fit improves a little, and students pay for it with worse ranks.
 
-**In the code:** `compare_two_solutions` calculates $\Delta \bar{\sigma}$, $\Delta \bar{r}$ and $\Delta G$, and also the change in unranked students, $\Delta U = U_B - U_A$. It does not calculate $\Delta r_{\max}$. The worst rank of each solution is shown on the run page, so the coordinator can read the difference there. Solutions can only be compared if they contain the same students.
+**In the code:** `compare_two_solutions` calculates all four deltas, and also the change in unranked students, $\Delta U = U_B - U_A$. It stores $\Delta r_{\max}$ as `worst_rank_delta` in `delta_metrics`, and the `/compare` page shows it on a ΔWorst Rank card. It uses the worst rank from the indicators, so the number matches the run page, and a student on an unranked project counts with rank $\rho$ (Section 2.2). Solutions can only be compared if they contain the same students.
 
 ### 4.2 Allocation Diff & Displaced Student Identification
 
@@ -296,7 +296,9 @@ The rules are in `generate_recommendations` in [`app/engine/recommendations.py`]
 - **Administrative Advice & Trade-Off Warning:** Use this when student satisfaction and few appeals matter most. Check $\bar{\sigma}$ and the unmet soft requirements, because the project teams may have weaker skills.
 
 ### 5.2 Policy Priority 2: Project Delivery & Technical Competence
-- **Quantitative Selection Criterion:** Maximization of mean skill fit $\bar{\sigma}$. If there is a tie, we pick the solution with the fewest unmet soft requirements.
+- **Quantitative Selection Criterion:** Maximization of mean skill fit $\bar{\sigma}$. If there is a tie, we pick the solution with the fewest unmet soft requirements. If there is still a tie, we pick the lowest mean rank $\bar{r}$.
+
+  Mean rank leaves out students on unranked projects (Section 3.2), and this priority does not look at $U$. So when two solutions tie on skills, the one that puts more students on unranked projects can still win.
 - **Calculated Evidence Reported:** $\bar{\sigma}$, the number of unmet soft requirements, and $\bar{r}$.
 - **Administrative Advice & Trade-Off Warning:** Use this when partners or the project work need strong skills. Students may get worse ranks, so check $\bar{r}$ and the students who moved on `/compare` before deciding.
 
@@ -312,7 +314,7 @@ In the app, Priority 2 is called *Project Skill Quality & Delivery Assurance* an
 | Priority | Recommended solution | Main reason |
 | :--- | :--- | :--- |
 | 1. Student preferences | Alt 1 | Lowest mean rank (1.00) |
-| 2. Project skills | Alt 2 | Highest skill fit (100.0%) and 0 unmet soft requirements |
+| 2. Project skills | Alt 3 | Highest skill fit (100.0%) and 0 unmet soft requirements, like Alt 2, and a better mean rank (1.10 against 1.20) |
 | 3. Equal outcomes | Alt 1 | Lowest Gini (0.0000) |
 
 Priority 3 is not the same as the `BALANCED` strategy. It picks Alt 1 instead of Alt 3 because it measures how equal the ranks are, not how well preferences and skills are combined.
@@ -334,11 +336,11 @@ Our operational assumptions are:
    - More students are fixed to a project than its maximum allows. (Edge Case 11)
    - No student meets a mandatory skill level for a project. (Edge Case 12) This check also stops the run when $l_p = 0$, even though that project could stay empty. So here the check is stricter than the model.
 
-   **In the solver**, HiGHS finds the rules that are fine alone but impossible together. (Edge Case 13) One example is two projects that both need the only student with a mandatory skill. Another is a student who is fixed to a project without having its mandatory skill. Both pass the first step. We ran both examples, and both ended as `INFEASIBLE` with 0 solutions.
+   **In the solver**, HiGHS finds the rules that are fine alone but impossible together. (Edge Case 13) One example is two projects that both need the only student with a mandatory skill. Another is a student who is fixed to a project without having its mandatory skill. Both pass the first step. We ran both examples, and both ended as `INFEASIBLE` with 0 solutions. Both are also automated tests in [`tests/test_edge_cases.py`](../tests/test_edge_cases.py), which check that the answer came from HiGHS and not from the first step.
 
    **Wrong data** is a different case. The run stops with status `INVALID_INPUT` for empty lists, duplicate IDs, an unknown project in a preference list (Edge Case 5), a minimum above the maximum or a maximum of 0 or less (Edge Case 9), and one student fixed to two projects (Edge Case 10). If one of the capacity checks above also fails, the status is `INFEASIBLE`.
 
-   **Too few solutions:** If fewer solutions exist than the coordinator asked for, the no-good cuts make the model infeasible at that point. We then return only the solutions we found, with no copies. (Edge Cases 14–15)
+   **Too few solutions:** If fewer solutions exist than the coordinator asked for, the no-good cuts make the model infeasible at that point. We then return only the solutions we found, with no copies. (Edge Cases 14–15) Because HiGHS proved that no more solutions exist, the run gives no warning. If the search stops for another reason, such as the time limit, the run warns that more solutions may exist.
 
 ---
 
@@ -355,14 +357,14 @@ The main limitations of our analytical model are:
    | 500 × 30 | 15,000 | 1.29 s |
    | 1,000 × 40 | 40,000 | 3.53 s |
 
-   These tests used random data on one computer, with no mandatory skills, and the time includes saving to the database. Harder data may take longer, because integer problems can become slow in the worst case. Each solve has a limit of 15 seconds. If the solver reached this limit, the code would treat the result as infeasible, even though nothing was proved. This did not happen in our tests.
+   These tests used random data on one computer, with no mandatory skills, and the time includes saving to the database. Harder data may take longer, because integer problems can become slow in the worst case. Each solve has a limit of 15 seconds. If HiGHS stops at this limit with an allocation, we keep it as a `FEASIBLE` solution: it meets all the rules, but it is not proven to be the best. The run is still `COMPLETED`, and the run page, the solution page and the recommendations page all say that this solution is not proven optimal. If HiGHS stops with no allocation, the run follows Section 2.6: with no solutions at all it is `FAILED`, not `INFEASIBLE`, because nothing was proved, and otherwise it keeps the solutions it has and warns that more may exist. The limit was not reached in our tests. We repeated the four sizes with the limit in place, and every solve still ended as optimal.
 2. **Linear Preference Assumptions:** Limitations of Borda count vs. non-linear student utilities. Our points treat every step the same, so moving from rank 1 to 2 costs as much as moving from rank 3 to 4. Real students may care much more about their top choices. A score that halves the points for each lower rank would show this, and the model would still be linear.
 3. **Individual vs. Team Synergies:** Individual skill evaluation vs. collective team diversity. Both $\sigma_{s,p}$ and rule 4 look at one student at a time. One strong machine learning student and one strong web student can be a good team, even if neither has both skills. Our model cannot see this. Modelling team skills would need extra variables.
 4. **Static Allocation:** Inability to capture dynamic scheduling or mid-semester changes. The model uses the data at one point in time, and it does not plan for students dropping out or projects changing. **Lock & Rerun** helps here, because the coordinator can lock the placements that should stay and solve again.
 5. **Declared skills:** Skill levels are declared, not tested. If students overstate their skills, `SKILL_FIT` rewards this.
 6. **The 50/50 weight:** $\alpha = 0.5$ is our choice, not a fact. Another weight would give another balanced solution.
 7. **Fairness is measured, not optimized:** $G$ and $r_{\max}$ are calculated after solving. No strategy tries to improve them directly.
-8. **Different does not mean better:** A no-good cut only forces a different solution. In the demo, Alt 3 has the same skill fit as Alt 2 and a better mean rank, because `SKILL_FIT` ignores preferences and several solutions tie at 100%. Priority 2 still recommends Alt 2, because its tie-break does not look at ranks. The coordinator should therefore always check `/compare`.
+8. **Different does not mean better:** A no-good cut only forces a different solution. In the demo, Alt 3 has the same skill fit as Alt 2 and a better mean rank, because `SKILL_FIT` ignores preferences and several solutions tie at 100%. Priority 2 recommends Alt 3, because its last tie-break is the mean rank. But nothing removes Alt 2 from the run, even though it is no better than Alt 3 on any measure. A tie-break also only helps when solutions are exactly equal on skills. The coordinator should therefore always check `/compare`.
 
 ---
 
