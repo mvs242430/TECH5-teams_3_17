@@ -223,7 +223,7 @@ only sees the links and buttons it can use.
 
 | Action | Route(s) | Helper checked | Admin | Coordinator | Student Viewer |
 | :--- | :--- | :--- | :---: | :---: | :---: |
-| View the dashboard, projects, skills, runs and recommendations | `GET /`, `/projects`, `/skills`, `/runs/<id>`, `/recommendations/<id>` | none (read only) | Yes | Yes | Yes, summaries only |
+| View the dashboard, solutions hub, projects, skills, runs and recommendations | `GET /`, `/solutions`, `/projects`, `/skills`, `/runs/<id>`, `/recommendations/<id>` | none (read only); diagnostics use `can_view_student_records()` | Yes | Yes | Yes, summaries only |
 | View solutions and comparisons | `GET /solutions/<id>`, `/compare` | none for the page; student names use `can_view_student_records()` | Yes | Yes | Yes, student IDs only (no names) |
 | View students, preferences and fixed locks | `GET /students`, `/preferences`, `/fixed-assignments` | `can_view_student_records()` | Yes | Yes | No |
 | Open the student and project forms | `GET /students/new`, `/students/<id>/edit`, `/projects/new`, `/projects/<id>/edit` | `can_edit_cohort_data()` | Yes | No | No |

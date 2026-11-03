@@ -17,8 +17,14 @@
       <ul class="nav-links">
         <li>
           <a href="{{ url_for('visualization_web.dashboard') }}"
-             class="{% if request.endpoint in ('visualization_web.dashboard', 'visualization_web.view_run', 'visualization_web.view_solution', 'visualization_web.view_recommendations') %}active{% endif %}">
+             class="{% if request.endpoint == 'visualization_web.dashboard' %}active{% endif %}">
             Dashboard
+          </a>
+        </li>
+        <li>
+          <a href="{{ url_for('visualization_web.solutions_overview') }}"
+             class="{% if request.endpoint in ('visualization_web.solutions_overview', 'visualization_web.view_run', 'visualization_web.view_solution', 'visualization_web.view_recommendations') %}active{% endif %}">
+            Solutions
           </a>
         </li>
         {# Pages with individual student data are hidden from the Student Viewer #}

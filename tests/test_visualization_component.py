@@ -2297,3 +2297,151 @@ def test_dashboard_kpi_links_say_edit_only_for_admin(
     else:
         assert "View Students" not in dashboard
         assert "View &amp; Edit Students" not in dashboard
+
+
+# -----------------------------------------------------------------------------
+# Issue A2.2.1 - Solutions hub page, active navbar tab & decision guide
+# -----------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("role", ["ADMIN", "COORDINATOR", "STUDENT"])
+def test_solutions_nav_link_next_to_dashboard_and_active_state(
+    standard_client, role: str
+) -> None:
+    """Solutions sits right after Dashboard and lights up on solution views."""
+    run = repositories.RunRepository().list_runs()[0]
+    sol_id = run.solutions[0].id
+    _switch_role(standard_client, role)
+
+    dash_html = standard_client.get("/").get_data(as_text=True)
+    # Solutions link appears immediately after Dashboard in the navbar.
+    nav_start = dash_html.index('<ul class="nav-links">')
+    nav_end = dash_html.index("</ul>", nav_start)
+    nav_block = dash_html[nav_start:nav_end]
+    assert nav_block.index('href="/"') < nav_block.index('href="/solutions"')
+    assert 'href="/"' in nav_block and 'class="active"' in nav_block
+
+    for sub_path in (
+        "/solutions",
+        f"/runs/{run.id}",
+        f"/solutions/{sol_id}",
+        f"/recommendations/{run.id}",
+    ):
+        page = standard_client.get(sub_path).get_data(as_text=True)
+        sub_nav = page[
+            page.index('<ul class="nav-links">') : page.index("</ul>")
+        ]
+        # Dashboard link is inactive; Solutions link is active.
+        dash_anchor = sub_nav.split("</li>")[0]
+        sol_anchor = sub_nav.split("</li>")[1]
+        assert 'class="active"' not in dash_anchor
+        assert 'href="/solutions"' in sol_anchor
+        assert 'class="active"' in sol_anchor
+
+
+def test_solutions_page_empty_populated_switcher_and_stale_states(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Verifies empty state, recommendation badges, run switcher & stale notice."""
+    db_file = tmp_path / "test_solutions_hub.db"
+    app = create_app({"TESTING": True, "DATABASE_PATH": db_file})
+    client = app.test_client()
+
+    # 1. Empty state when zero runs exist
+    empty_res = client.get("/solutions")
+    assert empty_res.status_code == 200
+    assert b"No Optimization Solutions Generated Yet" in empty_res.data
+    assert b"Go to Dashboard to Launch a Run" in empty_res.data
+
+    # 2. Seed benchmark and execute two runs with distinct primary strategies
+    client.post("/load-scenario/standard", follow_redirects=True)
+    students = repositories.StudentRepository().list_all()
+    projects = repositories.ProjectRepository().list_all()
+    skills = repositories.SkillRepository().list_all()
+
+    first_run = mocks.MockAssignmentEngine().execute_run(
+        contract.RunRequest(
+            students=students,
+            projects=projects,
+            skills=skills,
+            strategy_key="PREFERENCE",
+            max_alternatives=2,
+        )
+    )
+    second_run = mocks.MockAssignmentEngine().execute_run(
+        contract.RunRequest(
+            students=students,
+            projects=projects,
+            skills=skills,
+            strategy_key="SKILL_FIT",
+            max_alternatives=3,
+        )
+    )
+
+    # Default /solutions shows the latest active run with Decision Guide & badges
+    hub_page = client.get("/solutions").get_data(as_text=True)
+    assert f"Run <code>{second_run.id[:8]}</code>" in hub_page
+    assert "Decision-Support Policy Guide" in hub_page
+    assert f'/recommendations/{second_run.id}' in hub_page
+    assert "Recommended: Student Preference Maximization" in hub_page
+    assert "Recommended: Project Skill Quality" in hub_page
+    assert "Recommended: Balanced &amp; Egalitarian Allocation" in hub_page
+    assert 'id="runSelect"' in hub_page
+    for sol in second_run.solutions:
+        assert f'/solutions/{sol.id}' in hub_page
+
+    # 3. Switching to an earlier run via ?run_id=
+    switched_page = client.get(
+        f"/solutions?run_id={first_run.id}"
+    ).get_data(as_text=True)
+    assert f"Run <code>{first_run.id[:8]}</code>" in switched_page
+    assert "Primary Strategy: <strong>PREFERENCE</strong>" in switched_page
+
+    # 4. Unknown run_id flashes danger and redirects cleanly to /solutions
+    bad_res = client.get("/solutions?run_id=missing-run-999")
+    assert bad_res.status_code == 302
+    assert bad_res.headers["Location"].endswith("/solutions")
+    followed = client.get(
+        "/solutions?run_id=missing-run-999", follow_redirects=True
+    )
+    assert b"not found" in followed.data
+
+    # 5. Clearing cohort data marks historical runs as stale without crashing
+    client.post("/clear-data", follow_redirects=True)
+    stale_page = client.get("/solutions").get_data(as_text=True)
+    assert "Historical Run Notice:" in stale_page
+
+
+@pytest.mark.parametrize(
+    ("role", "sees_staff_diagnostics", "sees_optimize_controls"),
+    [
+        ("ADMIN", True, True),
+        ("COORDINATOR", True, True),
+        ("STUDENT", False, False),
+    ],
+)
+def test_solutions_page_student_privacy_and_role_controls(
+    real_engine_client,
+    role: str,
+    sees_staff_diagnostics: bool,
+    sees_optimize_controls: bool,
+) -> None:
+    """Student role sees zero student identities or run-management buttons."""
+    real_engine_client.post("/load-scenario/standard", follow_redirects=True)
+    repositories.StudentRepository().save(
+        models.Student(id="S_NOPREF", display_name="Quinn Nopref")
+    )
+    _run_engine(real_engine_client)
+    _switch_role(real_engine_client, role)
+
+    res = real_engine_client.get("/solutions")
+    assert res.status_code == 200
+    page = res.get_data(as_text=True)
+
+    assert ("Quinn Nopref" in page) is sees_staff_diagnostics
+    assert ('action="/clear-solutions"' in page) is sees_optimize_controls
+    assert ("New Run &rarr;" in page) is sees_optimize_controls
+    if not sees_staff_diagnostics:
+        assert not [i for i in _student_identifiers() if i in page]
+        assert "Detailed diagnostics are hidden for this role" in page
+
