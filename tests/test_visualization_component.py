@@ -1633,3 +1633,211 @@ def test_delete_buttons_shown_only_to_allowed_roles(
     assert ("/load-scenario/" in scenarios) is sees_cohort_buttons
     assert ("/clear-data" in scenarios) is sees_cohort_buttons
     assert ("/clear-solutions" in dashboard) is sees_clear_solutions
+
+
+# -----------------------------------------------------------------------------
+# Issue A2.4 - Who can do what (access check)
+# -----------------------------------------------------------------------------
+
+# Every POST route that changes data, with form data that an allowed role
+# could post successfully. "{solution_id}" is replaced by a saved solution.
+MUTATING_ROUTES = [
+    (
+        "/students/new",
+        {"id": "S_NEW", "display_name": "New", "preferences_text": "P1"},
+    ),
+    (
+        "/students/S01/edit",
+        {"display_name": "Renamed", "preferences_text": "P1, P2, P3"},
+    ),
+    ("/students/S01/delete", {}),
+    (
+        "/projects/new",
+        {
+            "id": "P_NEW",
+            "title": "New",
+            "min_capacity": "1",
+            "max_capacity": "3",
+        },
+    ),
+    (
+        "/projects/P1/edit",
+        {"title": "Renamed", "min_capacity": "1", "max_capacity": "3"},
+    ),
+    ("/projects/P1/delete", {}),
+    ("/skills/new", {"id": "go", "name": "Go", "description": ""}),
+    ("/skills/rust/delete", {}),
+    ("/fixed-assignments/new", {"student_id": "S01", "project_id": "P2"}),
+    ("/fixed-assignments/S02/delete", {}),
+    ("/load-scenario/fixed", {}),
+    ("/clear-data", {}),
+    ("/clear-solutions", {}),
+    (
+        "/runs/trigger",
+        {"primary_strategy": "PREFERENCE", "max_alternatives": "1"},
+    ),
+    (
+        "/solutions/{solution_id}/lock-and-rerun",
+        {"student_id": "S01", "project_id": "P2"},
+    ),
+]
+
+# POST routes that change only the session, never the database.
+SESSION_ONLY_ENDPOINTS = {"visualization_web.set_role"}
+
+
+def _seed_mutation_targets() -> str:
+    """Adds rows the routes above act on and returns a saved solution ID.
+
+    Adds a skill no project requires (so it can be deleted) and one fixed
+    lock (so it can be released).
+
+    Returns:
+        The ID of the first solution of the run saved by `standard_client`.
+    """
+    repositories.SkillRepository().save(
+        models.Skill(id="rust", name="Rust", description="")
+    )
+    repositories.FixedAssignmentRepository().save(
+        models.FixedAssignment(student_id="S02", project_id="P2")
+    )
+    return repositories.RunRepository().list_runs()[0].solutions[0].id
+
+
+def _db_snapshot() -> dict[str, list[tuple[Any, ...]]]:
+    """Returns every row of every table, so any change to the data shows."""
+    db = repositories.ProjectRepository().db
+    tables = db.execute_query(
+        "SELECT name FROM sqlite_master "
+        "WHERE type = 'table' AND name NOT LIKE 'sqlite_%';"
+    )
+    snapshot: dict[str, list[tuple[Any, ...]]] = {}
+    for table in tables:
+        rows = db.execute_query(f"SELECT * FROM {table['name']};")
+        # Sort by repr so rows with NULLs still sort without a TypeError.
+        snapshot[table["name"]] = sorted(
+            (tuple(row) for row in rows), key=repr
+        )
+    return snapshot
+
+
+@pytest.mark.parametrize(("path", "form"), MUTATING_ROUTES)
+def test_student_viewer_cannot_mutate(
+    standard_client, path: str, form: dict[str, str]
+) -> None:
+    """A Student Viewer is refused on every data route; nothing changes."""
+    solution_id = _seed_mutation_targets()
+    before = _db_snapshot()
+    _switch_role(standard_client, "STUDENT")
+
+    res = standard_client.post(
+        path.format(solution_id=solution_id), data=form, follow_redirects=True
+    )
+
+    assert res.status_code == 200
+    assert PERMISSION_DENIED in res.data
+    assert _db_snapshot() == before
+
+
+@pytest.mark.parametrize(("path", "form"), MUTATING_ROUTES)
+def test_admin_post_to_mutating_route_changes_data(
+    standard_client, path: str, form: dict[str, str]
+) -> None:
+    """Control: each request above does change data for an allowed role.
+
+    Without this, "nothing changed" in the Student Viewer test could come
+    from bad form data rather than from the role check.
+    """
+    solution_id = _seed_mutation_targets()
+    before = _db_snapshot()
+    _switch_role(standard_client, "ADMIN")
+
+    res = standard_client.post(
+        path.format(solution_id=solution_id), data=form, follow_redirects=True
+    )
+
+    assert res.status_code == 200
+    assert PERMISSION_DENIED not in res.data
+    assert _db_snapshot() != before
+
+
+def test_mutating_route_list_covers_every_post_route(standard_client) -> None:
+    """A new POST route fails this test until it is added to the list."""
+    url_map = standard_client.application.url_map
+    adapter = url_map.bind("localhost")
+    listed = {
+        adapter.match(path.format(solution_id="x"), method="POST")[0]
+        for path, _ in MUTATING_ROUTES
+    }
+    registered = {
+        rule.endpoint
+        for rule in url_map.iter_rules()
+        if "POST" in rule.methods
+    }
+
+    assert listed | SESSION_ONLY_ENDPOINTS == registered
+
+
+@pytest.mark.parametrize("role", ["ADMIN", "COORDINATOR"])
+def test_lock_roles_can_create_fixed_assignment(
+    standard_client, role: str
+) -> None:
+    """Admin and Coordinator may lock a student to a project."""
+    _switch_role(standard_client, role)
+
+    res = standard_client.post(
+        "/fixed-assignments/new",
+        data={"student_id": "S01", "project_id": "P2", "reason": "Sponsor"},
+        follow_redirects=True,
+    )
+
+    assert res.status_code == 200
+    assert b"Fixed assignment created" in res.data
+    locks = repositories.FixedAssignmentRepository().list_all()
+    assert [(fa.student_id, fa.project_id) for fa in locks] == [("S01", "P2")]
+
+
+@pytest.mark.parametrize("role", ["ADMIN", "COORDINATOR"])
+def test_lock_roles_can_release_fixed_assignment(
+    standard_client, role: str
+) -> None:
+    """Admin and Coordinator may release an existing lock."""
+    repositories.FixedAssignmentRepository().save(
+        models.FixedAssignment(student_id="S02", project_id="P2")
+    )
+    _switch_role(standard_client, role)
+
+    res = standard_client.post(
+        "/fixed-assignments/S02/delete", follow_redirects=True
+    )
+
+    assert res.status_code == 200
+    assert b"Fixed assignment for student &#39;S02&#39; removed." in res.data
+    assert repositories.FixedAssignmentRepository().list_all() == []
+
+
+@pytest.mark.parametrize(
+    ("role", "sees_lock_controls"),
+    [("ADMIN", True), ("COORDINATOR", True), ("STUDENT", False)],
+)
+def test_lock_controls_shown_only_to_lock_roles(
+    standard_client, role: str, sees_lock_controls: bool
+) -> None:
+    """Lock form, Release and Lock & Rerun buttons follow the role check."""
+    solution_id = _seed_mutation_targets()
+    _switch_role(standard_client, role)
+
+    locks_page = standard_client.get("/fixed-assignments").get_data(
+        as_text=True
+    )
+    solution_page = standard_client.get(
+        f"/solutions/{solution_id}"
+    ).get_data(as_text=True)
+
+    assert ('action="/fixed-assignments/new"' in locks_page) is (
+        sees_lock_controls
+    )
+    assert ("/fixed-assignments/S02/delete" in locks_page) is (
+        sees_lock_controls
+    )
+    assert ("/lock-and-rerun" in solution_page) is sees_lock_controls

@@ -206,3 +206,40 @@ The application models three explicit business roles in `app/visualization/auth.
 1. **Course Administrator (`ADMIN`)**: Full authorization. Can edit students, projects, skills, and fixed assignments, trigger optimization runs, and switch active roles.
 2. **Program Coordinator (`COORDINATOR`)**: Operational authorization. Can manage fixed assignment locks, trigger solver runs, and inspect detailed recommendations and comparisons. Read-only on baseline student data.
 3. **Student Viewer (`STUDENT`)**: Transparency view. Can browse anonymized dashboard metrics, project descriptions, and high-level allocation summaries. Mutating actions are disabled.
+
+### 6.1 Role × Action Table
+
+Every route that changes data checks the current role with one helper from
+`app/visualization/auth.py` before it touches the database. A refused request
+flashes "Permission denied for current role." and changes nothing. Templates
+get the same helpers as `can_edit`, `can_optimize` and `can_manage_locks`
+(from `inject_template_globals` in `routes.py`), so a role only sees the
+buttons it can use.
+
+| Action | Route(s) | Helper checked | Admin | Coordinator | Student Viewer |
+| :--- | :--- | :--- | :---: | :---: | :---: |
+| View dashboard, cohort, preferences, fixed locks, scenarios, runs, solutions, comparisons, recommendations | all `GET` routes | none (read only) | Yes | Yes | Yes |
+| Create, edit or delete students | `POST /students/new`, `/students/<id>/edit`, `/students/<id>/delete` | `can_edit_cohort_data()` | Yes | No | No |
+| Create, edit or delete projects | `POST /projects/new`, `/projects/<id>/edit`, `/projects/<id>/delete` | `can_edit_cohort_data()` | Yes | No | No |
+| Create or delete skills | `POST /skills/new`, `/skills/<id>/delete` | `can_edit_cohort_data()` | Yes | No | No |
+| Load a benchmark scenario (replaces the whole cohort) | `POST /load-scenario/<name>` | `can_edit_cohort_data()` | Yes | No | No |
+| Clear all cohort data | `POST /clear-data` | `can_edit_cohort_data()` | Yes | No | No |
+| Create or release a fixed-assignment lock | `POST /fixed-assignments/new`, `/fixed-assignments/<student_id>/delete` | `can_manage_fixed_assignments()` | Yes | Yes | No |
+| Trigger an optimisation run | `POST /runs/trigger` | `can_trigger_optimization()` | Yes | Yes | No |
+| Lock a student from a solution and re-run | `POST /solutions/<id>/lock-and-rerun` | `can_manage_fixed_assignments()` and `can_trigger_optimization()` | Yes | Yes | No |
+| Clear all runs and solutions | `POST /clear-solutions` | `can_trigger_optimization()` | Yes | Yes | No |
+| Switch the active role | `POST /set-role` | none (changes the session only) | Yes | Yes | Yes |
+
+Notes:
+- Fixed locks have their own helper, `can_manage_fixed_assignments()`, even
+  though it allows the same roles as `can_trigger_optimization()` today.
+  Running the solver and changing its inputs are separate rules, so changing
+  one does not silently change the other.
+- The role switcher in the top bar stands in for a login in this prototype:
+  any role can switch to any other. The checks above stop accidental changes
+  by a Student Viewer; a real deployment would take the role from sign-in.
+- The test `test_student_viewer_cannot_mutate` in
+  `tests/test_visualization_component.py` posts to every route in this table
+  as a Student Viewer and checks that no table in the database changed.
+  `test_mutating_route_list_covers_every_post_route` fails if a new `POST`
+  route is added without being added to that test.
