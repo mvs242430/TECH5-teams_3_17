@@ -8,6 +8,8 @@ transparent recommendations, side-by-side comparisons, and infeasibility.
 
 import pathlib
 
+import markupsafe
+
 from app import create_app
 from app.contract import contract
 from app.engine import solvers
@@ -138,3 +140,95 @@ def test_infeasible_cohort_integration(tmp_path: pathlib.Path) -> None:
     assert len(runs) == 1
     assert runs[0].status == "INFEASIBLE"
     assert runs[0].diagnostics
+
+
+def test_x3_full_end_to_end_flow(tmp_path: pathlib.Path) -> None:
+    """X3: one user journey through the real engine, start to finish.
+
+    Standard scenario -> run -> at least 2 solutions -> compare two of them
+    -> recommendations -> lock one student with lock-and-rerun -> the lock
+    is kept in every new solution -> infeasible scenario shows its reasons.
+    No mock engine is used: every run goes through AssignmentEngine.
+    """
+    db_file = tmp_path / "test_x3_end_to_end.db"
+    app = create_app({"TESTING": True, "DATABASE_PATH": db_file})
+    client = app.test_client()
+    engine: contract.AssignmentEngineContract = solvers.AssignmentEngine()
+
+    # 1. Load the standard scenario.
+    res = client.post("/load-scenario/standard", follow_redirects=True)
+    assert res.status_code == 200
+    assert b"Standard Cohort" in res.data
+
+    # 2. Trigger a run through the web client.
+    res = client.post(
+        "/runs/trigger",
+        data={"primary_strategy": "PREFERENCE", "max_alternatives": 3},
+        follow_redirects=True,
+    )
+    assert res.status_code == 200
+    assert b"not yet implemented" not in res.data  # real engine, no mock
+    first_run = engine.get_run(engine.list_runs(limit=1)[0].id)
+    assert first_run is not None
+    assert first_run.status == "COMPLETED"
+
+    # 3. At least two solutions.
+    assert len(first_run.solutions) >= 2
+    sol_a, sol_b = first_run.solutions[0], first_run.solutions[1]
+
+    # 4. Compare two of them.
+    res = client.get(f"/compare?sol1={sol_a.id}&sol2={sol_b.id}")
+    assert res.status_code == 200
+    assert b"Side-by-Side Solution Comparison" in res.data
+
+    # 5. Recommendations page opens.
+    res = client.get(f"/recommendations/{first_run.id}")
+    assert res.status_code == 200
+
+    # 6. Lock one student via lock-and-rerun. Prefer a student whose project
+    #    differs between the two solutions, so the lock actually matters.
+    projects_in_a = {a.student_id: a.project_id for a in sol_a.assignments}
+    to_lock = next(
+        (a for a in sol_b.assignments
+         if projects_in_a.get(a.student_id) != a.project_id),
+        sol_b.assignments[0],
+    )
+    res = client.post(
+        f"/solutions/{sol_b.id}/lock-and-rerun",
+        data={
+            "student_id": to_lock.student_id,
+            "project_id": to_lock.project_id,
+        },
+        follow_redirects=True,
+    )
+    assert res.status_code == 200
+    assert b"locked to Project" in res.data
+
+    # 7. The locked pair is in every solution of the new run.
+    new_run = engine.get_run(engine.list_runs(limit=1)[0].id)
+    assert new_run is not None
+    assert new_run.id != first_run.id
+    assert new_run.status == "COMPLETED"
+    assert new_run.solutions
+    for sol in new_run.solutions:
+        locked = [
+            a for a in sol.assignments if a.student_id == to_lock.student_id
+        ]
+        assert len(locked) == 1
+        assert locked[0].project_id == to_lock.project_id
+        assert locked[0].is_fixed
+
+    # 8. Load the infeasible scenario; the run page shows the reasons.
+    client.post("/load-scenario/infeasible", follow_redirects=True)
+    res = client.post(
+        "/runs/trigger",
+        data={"primary_strategy": "PREFERENCE", "max_alternatives": 2},
+        follow_redirects=True,
+    )
+    assert res.status_code == 200
+    bad_run = engine.list_runs(limit=1)[0]
+    assert bad_run.status == "INFEASIBLE"
+    assert bad_run.diagnostics["reasons"]
+    for reason in bad_run.diagnostics["reasons"]:
+        # The page escapes text the same way Jinja does.
+        assert str(markupsafe.escape(reason)).encode() in res.data
