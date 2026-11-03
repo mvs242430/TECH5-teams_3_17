@@ -86,18 +86,11 @@
   </div>
 
   <div class="card-body">
-    {% if not can_view_records %}
-    {# Student Viewer: high-level summaries only (docs/architecture.md §6) #}
-    <p style="color: var(--text-muted);">
-      Individual allocations are hidden for this role. The indicators above and the project capacity summary below
-      cover the whole cohort.
-    </p>
-    {% else %}
     <div class="table-responsive">
       <table class="data-table">
         <thead>
           <tr>
-            <th>Student</th>
+            <th>{% if can_view_records %}Student{% else %}Student ID{% endif %}</th>
             <th>Assigned Project</th>
             <th>Preference Rank</th>
             <th>Skill Fit Match</th>
@@ -111,10 +104,14 @@
             {% set proj = projects.get(asg.project_id) %}
             <tr>
               <td>
-                <strong>{{ stud.display_name if stud else asg.student_id }}</strong>
-                <div style="font-size: 0.8rem; color: var(--text-muted);">
-                  ID: <code>{{ asg.student_id }}</code>
-                </div>
+                {% if can_view_records and stud %}
+                  <strong>{{ stud.display_name }}</strong>
+                  <div style="font-size: 0.8rem; color: var(--text-muted);">
+                    ID: <code>{{ asg.student_id }}</code>
+                  </div>
+                {% else %}
+                  <code>{{ asg.student_id }}</code>
+                {% endif %}
               </td>
               <td>
                 <strong>{{ proj.title if proj else asg.project_id }}</strong>
@@ -175,7 +172,6 @@
         </tbody>
       </table>
     </div>
-    {% endif %}
   </div>
 </div>
 

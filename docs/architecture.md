@@ -1,4 +1,4 @@
-﻿# Deliverable 3: System Architecture Specification & Design Rationale
+# Deliverable 3: System Architecture Specification & Design Rationale
 
 ## 1. Executive Architectural Overview
 
@@ -223,13 +223,14 @@ only sees the links and buttons it can use.
 
 | Action | Route(s) | Helper checked | Admin | Coordinator | Student Viewer |
 | :--- | :--- | :--- | :---: | :---: | :---: |
-| View the dashboard, projects, skills, scenarios, runs and recommendations | `GET /`, `/projects`, `/skills`, `/scenarios`, `/runs/<id>`, `/recommendations/<id>` | none (read only) | Yes | Yes | Yes, summaries only |
-| View solutions and comparisons | `GET /solutions/<id>`, `/compare` | none for the page; rows per student use `can_view_student_records()` | Yes | Yes | Yes, summaries only |
+| View the dashboard, projects, skills, runs and recommendations | `GET /`, `/projects`, `/skills`, `/runs/<id>`, `/recommendations/<id>` | none (read only) | Yes | Yes | Yes, summaries only |
+| View solutions and comparisons | `GET /solutions/<id>`, `/compare` | none for the page; student names use `can_view_student_records()` | Yes | Yes | Yes, student IDs only (no names) |
 | View students, preferences and fixed locks | `GET /students`, `/preferences`, `/fixed-assignments` | `can_view_student_records()` | Yes | Yes | No |
 | Open the student and project forms | `GET /students/new`, `/students/<id>/edit`, `/projects/new`, `/projects/<id>/edit` | `can_edit_cohort_data()` | Yes | No | No |
 | Create, edit or delete students | `POST /students/new`, `/students/<id>/edit`, `/students/<id>/delete` | `can_edit_cohort_data()` | Yes | No | No |
 | Create, edit or delete projects | `POST /projects/new`, `/projects/<id>/edit`, `/projects/<id>/delete` | `can_edit_cohort_data()` | Yes | No | No |
 | Create or delete skills | `POST /skills/new`, `/skills/<id>/delete` | `can_edit_cohort_data()` | Yes | No | No |
+| Open the benchmark scenarios page | `GET /scenarios` | `can_edit_cohort_data()` | Yes | No | No |
 | Load a benchmark scenario (replaces the whole cohort) | `POST /load-scenario/<name>` | `can_edit_cohort_data()` | Yes | No | No |
 | Clear all cohort data | `POST /clear-data` | `can_edit_cohort_data()` | Yes | No | No |
 | Create or release a fixed-assignment lock | `POST /fixed-assignments/new`, `/fixed-assignments/<student_id>/delete` | `can_manage_fixed_assignments()` | Yes | Yes | No |
@@ -248,16 +249,17 @@ Notes:
   and administrators" edit this data; we read that as naming both roles as
   the forms' users overall, because §6 gives the rights of each role. The
   team chose this reading on 2026-11-03.
-- **Student Viewer, summaries only.** §6 allows "anonymized dashboard
-  metrics, project descriptions, and high-level allocation summaries". The
-  Student Viewer therefore cannot open the students, preferences or fixed
-  locks pages, and their links are hidden. On solution and compare pages the
-  rows per student are hidden, and the Fixed Assignment scenario text does
-  not name the locked student. On run and solution pages, diagnostics and
-  notices are hidden too, because they can name a student (for example
-  "Student 'Alice Chen' (S01) has submitted no ranked preferences").
-  Indicators, project capacity, rank distribution, recommendations and
-  counts stay visible.
+- **Student Viewer, summaries & pseudonymized IDs.** §6 allows "anonymized
+  dashboard metrics, project descriptions, and high-level allocation
+  summaries". The Student Viewer therefore cannot open the students,
+  preferences, fixed locks or scenarios pages, and their links are hidden. On
+  solution and compare pages, allocation rows are pseudonymized to student IDs
+  only (real names are omitted from the template context so a student can look
+  up their own ID without seeing classmates' names). On run and solution pages,
+  diagnostics and notices are hidden too, because they can name a student (for
+  example "Student 'Alice Chen' (S01) has submitted no ranked preferences").
+  Indicators, project capacity, rank distribution, recommendations and counts
+  stay visible.
 - **Role switching.** §6 gives "switch active roles" to the Admin, so only
   the Admin sees the role list. The prototype has no login, so the other
   roles see a "Return to Administrator" button instead; it stands in for

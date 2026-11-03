@@ -1627,12 +1627,16 @@ def test_delete_buttons_shown_only_to_allowed_roles(
     _switch_role(standard_client, role)
 
     dashboard = standard_client.get("/").get_data(as_text=True)
-    scenarios = standard_client.get("/scenarios").get_data(as_text=True)
+    scenarios_res = standard_client.get("/scenarios")
 
     assert ("/load-scenario/" in dashboard) is sees_cohort_buttons
-    assert ("/load-scenario/" in scenarios) is sees_cohort_buttons
-    assert ("/clear-data" in scenarios) is sees_cohort_buttons
     assert ("/clear-solutions" in dashboard) is sees_clear_solutions
+    if sees_cohort_buttons:
+        scenarios = scenarios_res.get_data(as_text=True)
+        assert "/load-scenario/" in scenarios
+        assert "/clear-data" in scenarios
+    else:
+        assert scenarios_res.status_code == 302
 
 
 # -----------------------------------------------------------------------------
@@ -1852,12 +1856,13 @@ def test_lock_controls_shown_only_to_lock_roles(
 # GET pages that list individual student records.
 STUDENT_RECORD_PAGES = ["/students", "/preferences", "/fixed-assignments"]
 
-# GET form pages, with the page a refused role lands on, per role.
+# GET form and cohort-seed pages, with the page a refused role lands on.
 FORM_PAGES = [
     ("/students/new", {"COORDINATOR": "/students", "STUDENT": "/"}),
     ("/students/S01/edit", {"COORDINATOR": "/students", "STUDENT": "/"}),
     ("/projects/new", {"COORDINATOR": "/projects", "STUDENT": "/projects"}),
     ("/projects/P1/edit", {"COORDINATOR": "/projects", "STUDENT": "/projects"}),
+    ("/scenarios", {"COORDINATOR": "/", "STUDENT": "/"}),
 ]
 
 
@@ -1880,6 +1885,13 @@ def _student_identifiers() -> list[str]:
     return [s.display_name for s in students] + [s.id for s in students]
 
 
+def _student_names() -> list[str]:
+    """Returns every student's human-readable display name in the database."""
+    return [
+        s.display_name for s in repositories.StudentRepository().list_all()
+    ]
+
+
 def _summary_pages() -> dict[str, str]:
     """Returns the pages a Student Viewer may open, by short name.
 
@@ -1893,7 +1905,6 @@ def _summary_pages() -> dict[str, str]:
         "dashboard": "/",
         "projects": "/projects",
         "skills": "/skills",
-        "scenarios": "/scenarios",
         "run": f"/runs/{run.id}",
         "solution": f"/solutions/{sol_a}",
         "compare": f"/compare?sol1={sol_a}&sol2={sol_b}",
@@ -2006,7 +2017,6 @@ def test_links_to_student_record_pages_follow_role(
         "dashboard",
         "projects",
         "skills",
-        "scenarios",
         "run",
         "solution",
         "compare",
@@ -2016,7 +2026,7 @@ def test_links_to_student_record_pages_follow_role(
 def test_student_viewer_summary_pages_show_no_student_identities(
     standard_client, page_name: str
 ) -> None:
-    """Pages a Student Viewer can open show no student names or IDs."""
+    """Student Viewer never sees student names; IDs appear only on allocations."""
     path = _summary_pages()[page_name]
     _switch_role(standard_client, "STUDENT")
 
@@ -2025,7 +2035,11 @@ def test_student_viewer_summary_pages_show_no_student_identities(
     assert res.status_code == 200
     assert PERMISSION_DENIED not in res.data
     page = res.get_data(as_text=True)
-    assert not [i for i in _student_identifiers() if i in page]
+    assert not [name for name in _student_names() if name in page]
+    if page_name in ("solution", "compare"):
+        assert [s_id for s_id in _student_ids() if f"<code>{s_id}</code>" in page]
+    else:
+        assert not [i for i in _student_identifiers() if i in page]
 
 
 @pytest.mark.parametrize("page_name", ["solution", "compare"])
@@ -2038,7 +2052,7 @@ def test_coordinator_sees_individual_allocations(
 
     page = standard_client.get(path).get_data(as_text=True)
 
-    assert [i for i in _student_identifiers() if i in page]
+    assert [name for name in _student_names() if name in page]
 
 
 @pytest.mark.parametrize("role", ["COORDINATOR", "STUDENT"])
@@ -2084,8 +2098,8 @@ def test_form_pages_refused_without_edit_right(
 @pytest.mark.parametrize(
     ("role", "list_pages"),
     [
-        ("COORDINATOR", ["/students", "/projects"]),
-        ("STUDENT", ["/projects"]),
+        ("COORDINATOR", ["/", "/students", "/projects", "/skills"]),
+        ("STUDENT", ["/", "/projects", "/skills"]),
     ],
 )
 def test_links_to_form_pages_hidden_without_edit_right(
@@ -2127,3 +2141,159 @@ def test_student_viewer_refusal_lands_on_dashboard_once(
     assert res.status_code == 200
     assert res.request.path == "/"
     assert res.data.count(PERMISSION_DENIED) == 1
+
+
+# -----------------------------------------------------------------------------
+# Issue A2.4.1 - Coordinator navbar label, skill form card & scenarios removal
+# -----------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("role", "expected_label", "verbose_label"),
+    [
+        ("COORDINATOR", "Coordinator", "Programme Coordinator"),
+        ("STUDENT", "Student", "Student Viewer"),
+    ],
+)
+def test_navbar_displays_short_role_labels(
+    standard_client,
+    role: str,
+    expected_label: str,
+    verbose_label: str,
+) -> None:
+    """Navbar displays compact 'Coordinator' and 'Student' role labels."""
+    _switch_role(standard_client, role)
+
+    page = standard_client.get("/").get_data(as_text=True)
+
+    assert f"Role: <strong>{expected_label}</strong>" in page
+    assert verbose_label not in page
+
+
+@pytest.mark.parametrize(
+    ("role", "sees_skill_form"),
+    [
+        ("ADMIN", True),
+        ("COORDINATOR", False),
+        ("STUDENT", False),
+    ],
+)
+def test_add_new_skill_card_shown_only_to_admin(
+    standard_client,
+    role: str,
+    sees_skill_form: bool,
+) -> None:
+    """The '+ Add New Skill' card is removed for Coordinator and Student."""
+    _switch_role(standard_client, role)
+
+    page = standard_client.get("/skills").get_data(as_text=True)
+
+    assert ("+ Add New Skill" in page) is sees_skill_form
+    assert ('action="/skills/new"' in page) is sees_skill_form
+    assert "Only Administrators can add or remove skill definitions." not in (
+        page
+    )
+
+
+@pytest.mark.parametrize(
+    ("role", "sees_scenarios"),
+    [
+        ("ADMIN", True),
+        ("COORDINATOR", False),
+        ("STUDENT", False),
+    ],
+)
+def test_scenarios_nav_and_dashboard_card_shown_only_to_admin(
+    standard_client,
+    role: str,
+    sees_scenarios: bool,
+) -> None:
+    """Scenarios nav tab and Quick Benchmark card appear only for Admin."""
+    _switch_role(standard_client, role)
+
+    dashboard = standard_client.get("/").get_data(as_text=True)
+
+    assert ("Quick Benchmark Scenarios" in dashboard) is sees_scenarios
+    assert ('href="/scenarios"' in dashboard) is sees_scenarios
+
+
+@pytest.mark.parametrize(
+    ("role", "sees_names"),
+    [
+        ("ADMIN", True),
+        ("COORDINATOR", True),
+        ("STUDENT", False),
+    ],
+)
+@pytest.mark.parametrize("page_name", ["solution", "compare"])
+def test_allocation_tables_show_ids_without_names_for_student(
+    standard_client,
+    role: str,
+    sees_names: bool,
+    page_name: str,
+) -> None:
+    """Student role sees student IDs and zero display names on allocations."""
+    path = _summary_pages()[page_name]
+    _switch_role(standard_client, role)
+
+    page = standard_client.get(path).get_data(as_text=True)
+
+    assert [s_id for s_id in _student_ids() if f"<code>{s_id}</code>" in page]
+    assert bool([n for n in _student_names() if n in page]) is sees_names
+    expected_header = (
+        "<th>Student</th>" if sees_names else "<th>Student ID</th>"
+    )
+    assert expected_header in page
+
+
+@pytest.mark.parametrize(
+    ("role", "sees_optimize_panel"),
+    [
+        ("ADMIN", True),
+        ("COORDINATOR", True),
+        ("STUDENT", False),
+    ],
+)
+def test_run_optimization_panel_shown_only_to_optimize_roles(
+    standard_client,
+    role: str,
+    sees_optimize_panel: bool,
+) -> None:
+    """Dashboard Run Assignment Optimization panel is hidden for Student."""
+    _switch_role(standard_client, role)
+
+    dashboard = standard_client.get("/").get_data(as_text=True)
+
+    assert ("Run Assignment Optimization" in dashboard) is sees_optimize_panel
+    assert ('action="/runs/trigger"' in dashboard) is sees_optimize_panel
+
+
+@pytest.mark.parametrize(
+    ("role", "sees_edit_wording", "sees_students_link"),
+    [
+        ("ADMIN", True, True),
+        ("COORDINATOR", False, True),
+        ("STUDENT", False, False),
+    ],
+)
+def test_dashboard_kpi_links_say_edit_only_for_admin(
+    standard_client,
+    role: str,
+    sees_edit_wording: bool,
+    sees_students_link: bool,
+) -> None:
+    """Dashboard KPI links omit '& Edit' for roles without cohort edit rights."""
+    _switch_role(standard_client, role)
+
+    dashboard = standard_client.get("/").get_data(as_text=True)
+
+    assert ("View &amp; Edit Projects" in dashboard) is sees_edit_wording
+    assert ("View Projects &rarr;" in dashboard) is (not sees_edit_wording)
+    if sees_students_link:
+        assert ("View &amp; Edit Students" in dashboard) is sees_edit_wording
+        assert ("View Students &rarr;" in dashboard) is (
+            not sees_edit_wording
+        )
+    else:
+        assert "View Students" not in dashboard
+        assert "View &amp; Edit Students" not in dashboard

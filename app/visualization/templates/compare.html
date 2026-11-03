@@ -160,17 +160,11 @@
       <h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 1rem;">
         Detailed Allocation Shifts ({{ comparison.changed_students_count }} students changed)
       </h3>
-      {% if not can_view_records %}
-      {# Student Viewer: high-level summaries only (docs/architecture.md §6) #}
-      <p style="color: var(--text-muted);">
-        Individual students are hidden for this role. The indicators and findings above cover the whole cohort.
-      </p>
-      {% else %}
       <div class="table-responsive">
         <table class="data-table">
           <thead>
             <tr>
-              <th>Student</th>
+              <th>{% if can_view_records %}Student{% else %}Student ID{% endif %}</th>
               <th>Solution A Project</th>
               <th>Solution A Rank</th>
               <th>Solution B Project</th>
@@ -181,7 +175,16 @@
           <tbody>
             {% for c in comparison.changed_assignments %}
               <tr>
-                <td><strong>{{ c.student_name or c.student_id }}</strong></td>
+                <td>
+                  {% if can_view_records and c.student_name %}
+                    <strong>{{ c.student_name }}</strong>
+                    <div style="font-size: 0.8rem; color: var(--text-muted);">
+                      ID: <code>{{ c.student_id }}</code>
+                    </div>
+                  {% else %}
+                    <code>{{ c.student_id }}</code>
+                  {% endif %}
+                </td>
                 <td>{{ c.project_a_title or c.project_a_id }}</td>
                 <td>Choice #{{ c.rank_a }}</td>
                 <td>{{ c.project_b_title or c.project_b_id }}</td>
@@ -200,7 +203,6 @@
           </tbody>
         </table>
       </div>
-      {% endif %}
     {% elif not comparison and sol_a and sol_b %}
       <p style="color: var(--text-muted); text-align: center; padding: 2rem;">
         Comparison data not available for the selected solutions.

@@ -56,12 +56,14 @@
             Skills
           </a>
         </li>
+        {% if can_edit %}
         <li>
           <a href="{{ url_for('visualization_web.scenarios_page') }}"
              class="{% if request.path.startswith(url_for('visualization_web.scenarios_page')) %}active{% endif %}">
             Scenarios
           </a>
         </li>
+        {% endif %}
         <li>
           <a href="{{ url_for('visualization_web.compare_solutions') }}"
              class="{% if request.path.startswith(url_for('visualization_web.compare_solutions')) %}active{% endif %}">
@@ -75,8 +77,8 @@
         <form action="{{ url_for('visualization_web.set_role') }}" method="POST" style="display: flex; align-items: center; gap: 0.5rem;">
           <label for="roleSelect">Role:</label>
           <select id="roleSelect" name="role" class="role-select" onchange="this.form.submit()">
-            {% for r_key, r_desc in all_roles.items() %}
-              <option value="{{ r_key }}" {% if current_role == r_key %}selected{% endif %}>{{ r_desc }}</option>
+            {% for r_key, r_label in nav_role_labels.items() %}
+              <option value="{{ r_key }}" {% if current_role == r_key %}selected{% endif %}>{{ r_label }}</option>
             {% endfor %}
           </select>
         </form>
@@ -84,7 +86,7 @@
         {# Only the Administrator switches roles. There is no login, so this
            button stands in for signing in as Administrator again. #}
         <form action="{{ url_for('visualization_web.set_role') }}" method="POST" style="display: flex; align-items: center; gap: 0.5rem;">
-          <span>Role: <strong>{{ all_roles.get(current_role, current_role) }}</strong></span>
+          <span>Role: <strong>{{ nav_role_labels.get(current_role, current_role) }}</strong></span>
           <input type="hidden" name="role" value="ADMIN">
           <button type="submit" class="btn btn-sm btn-secondary" style="white-space: nowrap;">Return to Administrator</button>
         </form>

@@ -42,6 +42,7 @@ def inject_template_globals() -> dict[str, Any]:
     return {
         "current_role": auth.get_current_role(),
         "all_roles": auth.UserRole.ALL_ROLES,
+        "nav_role_labels": auth.UserRole.NAV_LABELS,
         "can_edit": auth.can_edit_cohort_data(),
         "can_optimize": auth.can_trigger_optimization(),
         "can_manage_locks": auth.can_manage_fixed_assignments(),
@@ -1211,8 +1212,16 @@ def delete_fixed_assignment(student_id: str) -> flask.Response:
 
 
 @web_bp.get("/scenarios")
-def scenarios_page() -> str:
-    """Displays benchmark scenarios loader."""
+def scenarios_page() -> flask.Response | str:
+    """Displays benchmark scenarios loader for Administrators.
+
+    Returns:
+        Rendered scenarios template for Administrators, or redirect to
+        the dashboard when the current role lacks cohort edit rights.
+    """
+    if not auth.can_edit_cohort_data():
+        flask.flash("Permission denied for current role.", "danger")
+        return flask.redirect(flask.url_for("visualization_web.dashboard"))
     return flask.render_template("scenarios.html")
 
 
@@ -1368,7 +1377,12 @@ def view_solution(solution_id: str) -> Any:
         return flask.redirect(flask.url_for("visualization_web.dashboard"))
 
     run = repo.get_run(solution.run_id)
-    students = {s.id: s for s in repositories.StudentRepository().list_all()}
+    # Student Viewer sees pseudonymized student IDs only (no display names).
+    students = (
+        {s.id: s for s in repositories.StudentRepository().list_all()}
+        if auth.can_view_student_records()
+        else {}
+    )
     projects = {p.id: p for p in repositories.ProjectRepository().list_all()}
 
     return flask.render_template(
@@ -1682,12 +1696,16 @@ def compare_solutions() -> Any:
         )
         return flask.redirect(flask.url_for("visualization_web.compare_solutions"))
 
-    # Enrich changed_assignments with human-readable student names and project
-    # titles from the repositories so the Compare table displays full names.
-    student_map = {
-        s.id: s.display_name
-        for s in repositories.StudentRepository().list_all()
-    }
+    # Enrich changed_assignments with human-readable student names (only for
+    # roles authorized to view student records) and project titles.
+    student_map = (
+        {
+            s.id: s.display_name
+            for s in repositories.StudentRepository().list_all()
+        }
+        if auth.can_view_student_records()
+        else {}
+    )
     project_map = {
         p.id: p.title for p in repositories.ProjectRepository().list_all()
     }
@@ -1695,8 +1713,7 @@ def compare_solutions() -> Any:
         s_id = item.get("student_id", "")
         p_a_id = item.get("project_a_id") or item.get("project_a", "")
         p_b_id = item.get("project_b_id") or item.get("project_b", "")
-        if s_id in student_map:
-            item["student_name"] = student_map[s_id]
+        item["student_name"] = student_map.get(s_id, "")
         if p_a_id in project_map:
             item["project_a_title"] = project_map[p_a_id]
         if p_b_id in project_map:

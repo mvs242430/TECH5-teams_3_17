@@ -11,7 +11,7 @@ import flask
 
 
 class UserRole:
-    """User role constants and descriptions."""
+    """User role constants, full descriptions, and compact navbar labels."""
 
     ADMIN = "ADMIN"
     COORDINATOR = "COORDINATOR"
@@ -21,6 +21,12 @@ class UserRole:
         ADMIN: "Administrator (Full Control)",
         COORDINATOR: "Programme Coordinator (Runs & Analysis)",
         STUDENT: "Student Viewer (Read Only)",
+    }
+
+    NAV_LABELS = {
+        ADMIN: "Administrator",
+        COORDINATOR: "Coordinator",
+        STUDENT: "Student",
     }
 
 
