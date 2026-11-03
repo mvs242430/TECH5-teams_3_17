@@ -1350,9 +1350,56 @@ def trigger_run() -> flask.Response:
     )
 
 
+def _render_solutions_page(
+    selected_run: models.AssignmentRun | None,
+    recent_runs: list[models.AssignmentRun],
+    usable_ids: set[str],
+) -> str:
+    """Renders the unified solutions and run overview template.
+
+    Shared by ``solutions_overview`` (``GET /solutions``) and ``view_run``
+    (``GET /runs/<run_id>``) so opening a run from the Dashboard and opening
+    Solutions from the navbar present the exact same view with the active run
+    selected in the top run switcher.
+
+    Args:
+        selected_run: Full run entity to display, or ``None`` when no runs
+            exist in the database.
+        recent_runs: Recent runs ordered newest-first for the dropdown.
+        usable_ids: Solution IDs that still hold at least one student
+            assignment row.
+
+    Returns:
+        Rendered HTML string for ``solutions.html``.
+    """
+    dropdown_runs = list(recent_runs)
+    if selected_run and all(r.id != selected_run.id for r in dropdown_runs):
+        dropdown_runs.append(selected_run)
+
+    recs: list[recommendations.RecommendationItem] = []
+    unproven_alternatives: list[int] = []
+    is_stale_run = False
+
+    if selected_run and selected_run.solutions:
+        recs = recommendations.generate_recommendations(selected_run.solutions)
+        unproven_alternatives = _unproven_alternatives(selected_run.solutions)
+        is_stale_run = not any(
+            s.id in usable_ids for s in selected_run.solutions
+        )
+
+    return flask.render_template(
+        "solutions.html",
+        selected_run=selected_run,
+        dropdown_runs=dropdown_runs,
+        recommendations=recs,
+        unproven_alternatives=unproven_alternatives,
+        is_stale_run=is_stale_run,
+    )
+
+
 @web_bp.get("/solutions")
 def solutions_overview() -> flask.Response | str:
-    """Displays the solutions hub, policy decision guide, and run switcher.
+    """Displays the unified solutions view and run switcher.
 
     Resolves an optional ``run_id`` query parameter to inspect a specific
     historical run. When omitted, defaults to the most recent run whose
@@ -1360,7 +1407,7 @@ def solutions_overview() -> flask.Response | str:
     newest recorded run overall when no active assignments exist.
 
     Returns:
-        Rendered ``solutions.html`` hub view, or a redirect to ``/solutions``
+        Rendered ``solutions.html`` view, or a redirect to ``/solutions``
         with a danger flash message when an unknown ``run_id`` is requested.
     """
     run_repo = repositories.RunRepository()
@@ -1379,7 +1426,7 @@ def solutions_overview() -> flask.Response | str:
             )
     elif recent_runs:
         # Prefer the newest run whose solutions still hold active assignments
-        # so the Solutions hub immediately shows actionable allocations.
+        # so the Solutions tab immediately shows actionable allocations.
         default_summary = next(
             (
                 r
@@ -1390,50 +1437,32 @@ def solutions_overview() -> flask.Response | str:
         )
         selected_run = run_repo.get_run(default_summary.id)
 
-    recs: list[recommendations.RecommendationItem] = []
-    solution_badges: dict[str, list[tuple[int, str]]] = (
-        collections.defaultdict(list)
-    )
-    unproven_alternatives: list[int] = []
-    is_stale_run = False
-
-    if selected_run and selected_run.solutions:
-        recs = recommendations.generate_recommendations(selected_run.solutions)
-        for idx, rec in enumerate(recs, start=1):
-            solution_badges[rec.recommended_solution_id].append(
-                (idx, rec.priority_focus)
-            )
-        unproven_alternatives = _unproven_alternatives(selected_run.solutions)
-        is_stale_run = not any(
-            s.id in usable_ids for s in selected_run.solutions
-        )
-
-    return flask.render_template(
-        "solutions.html",
-        selected_run=selected_run,
-        recent_runs=recent_runs,
-        recommendations=recs,
-        solution_badges=dict(solution_badges),
-        unproven_alternatives=unproven_alternatives,
-        is_stale_run=is_stale_run,
-    )
+    return _render_solutions_page(selected_run, recent_runs, usable_ids)
 
 
 @web_bp.get("/runs/<run_id>")
-def view_run(run_id: str) -> Any:
-    """Displays results, alternative solutions, and diagnostics of a run."""
-    run = repositories.RunRepository().get_run(run_id)
+def view_run(run_id: str) -> flask.Response | str:
+    """Displays results, alternative solutions, and diagnostics of a run.
+
+    Renders the same unified ``solutions.html`` page as ``GET /solutions``
+    with ``run_id`` pre-selected in the top run switcher dropdown.
+
+    Args:
+        run_id: Identifier of the optimization run to display.
+
+    Returns:
+        Rendered ``solutions.html`` view, or a redirect to the dashboard when
+        ``run_id`` does not exist.
+    """
+    run_repo = repositories.RunRepository()
+    run = run_repo.get_run(run_id)
     if not run:
         flask.flash(f"Run '{run_id}' not found.", "danger")
         return flask.redirect(flask.url_for("visualization_web.dashboard"))
 
-    recs = recommendations.generate_recommendations(run.solutions)
-
-    return flask.render_template(
-        "run_detail.html",
-        run=run,
-        recommendations=recs,
-    )
+    recent_runs = run_repo.list_runs(limit=25)
+    usable_ids = run_repo.list_solution_ids_with_assignments()
+    return _render_solutions_page(run, recent_runs, usable_ids)
 
 
 @web_bp.get("/solutions/<solution_id>")

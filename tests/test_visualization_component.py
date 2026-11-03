@@ -2342,7 +2342,7 @@ def test_solutions_nav_link_next_to_dashboard_and_active_state(
 def test_solutions_page_empty_populated_switcher_and_stale_states(
     tmp_path: pathlib.Path,
 ) -> None:
-    """Verifies empty state, recommendation badges, run switcher & stale notice."""
+    """Verifies unified /solutions and /runs/<id> view, dropdown & stale notice."""
     db_file = tmp_path / "test_solutions_hub.db"
     app = create_app({"TESTING": True, "DATABASE_PATH": db_file})
     client = app.test_client()
@@ -2378,24 +2378,34 @@ def test_solutions_page_empty_populated_switcher_and_stale_states(
         )
     )
 
-    # Default /solutions shows the latest active run with Decision Guide & badges
+    # Default /solutions shows the latest active run with unified layout
     hub_page = client.get("/solutions").get_data(as_text=True)
     assert f"Run <code>{second_run.id[:8]}</code>" in hub_page
-    assert "Decision-Support Policy Guide" in hub_page
+    assert "Decision-Support Recommendations Available" in hub_page
     assert f'/recommendations/{second_run.id}' in hub_page
-    assert "Recommended: Student Preference Maximization" in hub_page
-    assert "Recommended: Project Skill Quality" in hub_page
-    assert "Recommended: Balanced &amp; Egalitarian Allocation" in hub_page
+    assert "Student Preference Maximization" in hub_page
+    assert "Project Skill Quality &amp; Delivery Assurance" in hub_page
+    assert "Balanced &amp; Egalitarian Allocation" in hub_page
     assert 'id="runSelect"' in hub_page
+    assert f'<option value="{second_run.id}" selected>' in hub_page
+    assert 'action="/clear-solutions"' in hub_page
     for sol in second_run.solutions:
         assert f'/solutions/{sol.id}' in hub_page
 
-    # 3. Switching to an earlier run via ?run_id=
+    # 3. Switching to an earlier run via ?run_id= AND opening from Dashboard (/runs/<id>)
     switched_page = client.get(
         f"/solutions?run_id={first_run.id}"
     ).get_data(as_text=True)
-    assert f"Run <code>{first_run.id[:8]}</code>" in switched_page
-    assert "Primary Strategy: <strong>PREFERENCE</strong>" in switched_page
+    run_detail_page = client.get(f"/runs/{first_run.id}").get_data(
+        as_text=True
+    )
+    for rendered in (switched_page, run_detail_page):
+        assert "Solutions &amp; Decision Overview" in rendered
+        assert f"Run <code>{first_run.id[:8]}</code>" in rendered
+        assert "Primary Strategy: <strong>PREFERENCE</strong>" in rendered
+        assert 'id="runSelect"' in rendered
+        assert f'<option value="{first_run.id}" selected>' in rendered
+        assert 'action="/clear-solutions"' in rendered
 
     # 4. Unknown run_id flashes danger and redirects cleanly to /solutions
     bad_res = client.get("/solutions?run_id=missing-run-999")

@@ -3,51 +3,46 @@
 {% block title %}Solutions & Decision Overview - TECH5{% endblock %}
 
 {% block content %}
-<style>
-  .decision-accent-1 { border-left: 4px solid var(--success); }
-  .decision-accent-2 { border-left: 4px solid var(--primary); }
-  .decision-accent-3 { border-left: 4px solid var(--secondary); }
-  .sol-recommended-card { border-color: #93c5fd; }
-</style>
-
 {% if selected_run %}
-  <!-- Top Header & Run Context Switcher -->
   <div class="card">
-    <div class="card-header" style="flex-wrap: wrap; gap: 1rem;">
-      <div>
-        <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
-          <h1 class="card-title" style="font-size: 1.35rem;">Solutions &amp; Decision Overview</h1>
-          {% if selected_run.status == 'COMPLETED' %}
-            <span class="badge badge-success" style="font-size: 0.85rem; padding: 0.35rem 0.7rem;">
-              COMPLETED ({{ selected_run.solutions|length }} Alternatives)
-            </span>
-          {% elif selected_run.status == 'INFEASIBLE' %}
-            <span class="badge badge-danger" style="font-size: 0.85rem; padding: 0.35rem 0.7rem;">INFEASIBLE</span>
-          {% elif selected_run.status == 'INVALID_INPUT' %}
-            <span class="badge badge-warning" style="font-size: 0.85rem; padding: 0.35rem 0.7rem;">INVALID INPUT</span>
-          {% else %}
-            <span class="badge badge-secondary" style="font-size: 0.85rem; padding: 0.35rem 0.7rem;">{{ selected_run.status }}</span>
-          {% endif %}
+    <!-- Top Header & Run Switcher (Unified across Navbar Solutions & Dashboard View Solutions) -->
+    <div class="card-header" style="flex-direction: column; align-items: stretch; gap: 0.85rem;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.75rem;">
+        <div>
+          <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+            <h2 class="card-title" style="font-size: 1.35rem;">Solutions &amp; Decision Overview</h2>
+            {% if selected_run.status == 'COMPLETED' %}
+              <span class="badge badge-success" style="font-size: 0.85rem; padding: 0.35rem 0.75rem;">
+                COMPLETED ({{ selected_run.solutions|length }} Alternatives)
+              </span>
+            {% elif selected_run.status == 'INFEASIBLE' %}
+              <span class="badge badge-danger" style="font-size: 0.85rem; padding: 0.35rem 0.75rem;">INFEASIBLE</span>
+            {% elif selected_run.status == 'INVALID_INPUT' %}
+              <span class="badge badge-warning" style="font-size: 0.85rem; padding: 0.35rem 0.75rem;">INVALID INPUT</span>
+            {% else %}
+              <span class="badge badge-secondary" style="font-size: 0.85rem; padding: 0.35rem 0.75rem;">{{ selected_run.status }}</span>
+            {% endif %}
+          </div>
+          <p style="color: var(--text-muted); font-size: 0.88rem; margin-top: 0.25rem;">
+            Run <code>{{ selected_run.id[:8] }}</code> &bull; Executed {{ selected_run.created_at[:19].replace('T', ' ') }} UTC
+            &bull; Primary Strategy: <strong>{{ selected_run.configuration.get('primary_strategy', 'PREFERENCE') }}</strong>
+          </p>
         </div>
-        <p style="color: var(--text-muted); font-size: 0.88rem; margin-top: 0.25rem;">
-          Run <code>{{ selected_run.id[:8] }}</code> &bull; Executed {{ selected_run.created_at[:19].replace('T', ' ') }} UTC
-          &bull; Primary Strategy: <strong>{{ selected_run.configuration.get('primary_strategy', 'PREFERENCE') }}</strong>
-        </p>
       </div>
 
       <div style="display: flex; align-items: center; gap: 0.65rem; flex-wrap: wrap;">
-        {% if recent_runs|length > 1 %}
+        {% if dropdown_runs %}
           <form action="{{ url_for('visualization_web.solutions_overview') }}" method="GET"
                 style="display: flex; align-items: center; gap: 0.5rem;">
             <label for="runSelect" style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted); white-space: nowrap;">
               Run:
             </label>
             <select id="runSelect" name="run_id" class="form-control"
-                    style="width: auto; min-width: 240px; padding: 0.4rem 0.65rem; font-size: 0.85rem;"
+                    style="width: auto; min-width: 260px; padding: 0.4rem 0.65rem; font-size: 0.85rem;"
                     onchange="this.form.submit()">
-              {% for r in recent_runs %}
+              {% for r in dropdown_runs %}
                 <option value="{{ r.id }}" {% if r.id == selected_run.id %}selected{% endif %}>
-                  {{ r.created_at[:16].replace('T', ' ') }} &mdash; {{ r.status }} ({{ r.solutions|length }} alt{{ '' if r.solutions|length == 1 else 's' }})
+                  {{ r.created_at[:19].replace('T', ' ') }} &mdash; {{ r.status }} ({{ r.solutions|length }} alt{{ '' if r.solutions|length == 1 else 's' }}) &bull; {{ r.id[:8] }}
                 </option>
               {% endfor %}
             </select>
@@ -93,99 +88,110 @@
         </div>
       {% endif %}
 
-      <!-- Integrated Policy Recommendation Decision Guide -->
+      <!-- Diagnostics & Warnings Panel -->
+      <div style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.25rem; margin-bottom: 1.5rem;">
+        <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem;">Run Diagnostics &amp; Solver Notes:</h3>
+        {% if selected_run.diagnostics.get('message') %}
+          <p style="color: var(--text-main); margin-bottom: 0.5rem;">
+            <strong>{{ selected_run.diagnostics.get('message') }}</strong>
+          </p>
+        {% endif %}
+        {# Reasons, errors, warnings and notes can name students (for example
+           "Student 'Alice Chen' (S01) has submitted no ranked preferences"), so
+           the Student Viewer only learns that they exist. #}
+        {% if not can_view_records %}
+          {% if selected_run.diagnostics.get('reasons') or selected_run.diagnostics.get('errors') or selected_run.diagnostics.get('warnings') or selected_run.diagnostics.get('notes') %}
+            <p style="color: var(--text-muted); font-size: 0.88rem;">
+              Detailed diagnostics are hidden for this role because they can name individual students.
+            </p>
+          {% endif %}
+        {% else %}
+          {% if selected_run.diagnostics.get('reasons') %}
+            <ul style="color: var(--danger); margin-left: 1.5rem; margin-bottom: 0.5rem;">
+              {% for r in selected_run.diagnostics.get('reasons') %}
+                <li>{{ r }}</li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+          {% if selected_run.diagnostics.get('errors') %}
+            <ul style="color: var(--danger); margin-left: 1.5rem; margin-bottom: 0.5rem;">
+              {% for err in selected_run.diagnostics.get('errors') %}
+                <li>{{ err }}</li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+          {% if selected_run.diagnostics.get('warnings') %}
+            <div style="margin-top: 0.5rem;">
+              <strong style="color: var(--warning); font-size: 0.88rem;">Notices &amp; Warnings:</strong>
+              <ul style="color: #b45309; margin-left: 1.5rem; font-size: 0.88rem;">
+                {% for w in selected_run.diagnostics.get('warnings') %}
+                  <li>{{ w }}</li>
+                {% endfor %}
+              </ul>
+            </div>
+          {% endif %}
+          {% if selected_run.diagnostics.get('notes') %}
+            <p style="color: var(--text-muted); font-size: 0.88rem; margin-top: 0.4rem;">
+              {{ selected_run.diagnostics.get('notes') }}
+            </p>
+          {% endif %}
+        {% endif %}
+      </div>
+
+      <!-- Recommendations Teaser & Badge Bar -->
       {% if recommendations %}
-        <div style="background: var(--primary-light); border: 1px solid #bfdbfe; border-radius: var(--radius-md);
-                    padding: 1rem 1.25rem; margin-bottom: 1rem;
-                    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+        <div style="background: var(--primary-light); border: 1px solid #bfdbfe; border-radius: var(--radius-md); padding: 1rem 1.25rem; margin-bottom: 0.75rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
           <div>
-            <strong style="color: var(--primary); font-size: 1rem;">&#128161; Decision-Support Policy Guide</strong>
-            <p style="color: #1e3a8a; font-size: 0.88rem; margin-top: 0.15rem;">
-              At-a-glance policy winners across Student Preference, Project Skill Quality, and Egalitarian Fairness.
+            <strong style="color: var(--primary); font-size: 1rem;">&#128161; Decision-Support Recommendations Available</strong>
+            <p style="color: #1e3a8a; font-size: 0.88rem; margin-top: 0.2rem;">
+              Inspect transparent policy recommendations (Student Preference vs Project Quality vs Egalitarian Fairness).
             </p>
           </div>
           <a href="{{ url_for('visualization_web.view_recommendations', run_id=selected_run.id) }}" class="btn btn-primary">
-            Full Evidence &amp; Advice &rarr;
+            View Recommendations &rarr;
           </a>
         </div>
 
-        <div class="kpi-grid" style="margin-bottom: 1.75rem;">
+        <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: var(--radius-md);
+                    padding: 0.75rem 1.25rem; margin-bottom: 1.5rem;
+                    display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center;">
+          <span style="font-size: 0.82rem; font-weight: 600; color: var(--text-muted); margin-right: 0.25rem;">
+            Recommended:
+          </span>
           {% for rec in recommendations %}
-            <div class="kpi-card {% if loop.index == 1 %}decision-accent-1{% elif loop.index == 2 %}decision-accent-2{% else %}decision-accent-3{% endif %}">
-              <span class="kpi-label">{{ rec.priority_focus }}</span>
-              <span class="kpi-value" style="font-size: 1.35rem;">
-                Alternative #{{ rec.recommended_alternative_number }}
-              </span>
-              {% if rec.evidence %}
-                <span class="kpi-sub" style="color: var(--text-main);">
-                  {{ rec.evidence[0] }}
-                </span>
-              {% endif %}
-              <div style="margin-top: 0.6rem; display: flex; gap: 0.75rem; flex-wrap: wrap; font-size: 0.82rem;">
-                <a href="{{ url_for('visualization_web.view_solution', solution_id=rec.recommended_solution_id) }}"
-                   style="color: var(--primary); font-weight: 600; text-decoration: none;">
-                  Explore Alt #{{ rec.recommended_alternative_number }} &rarr;
-                </a>
-                <a href="{{ url_for('visualization_web.view_recommendations', run_id=selected_run.id) }}#rec-{{ loop.index }}"
-                   style="color: var(--secondary); font-weight: 500; text-decoration: none;">
-                  Why this one? &rarr;
-                </a>
-              </div>
-            </div>
+            <a href="{{ url_for('visualization_web.view_recommendations', run_id=selected_run.id) }}#rec-{{ loop.index }}"
+               class="badge {% if loop.index == 1 %}badge-success{% elif loop.index == 2 %}badge-primary{% else %}badge-secondary{% endif %}"
+               style="font-size: 0.78rem; padding: 0.3rem 0.65rem; text-decoration: none;"
+               title="{{ rec.priority_focus }}">
+              Alt #{{ rec.recommended_alternative_number }} &mdash; {{ rec.priority_focus }}
+            </a>
           {% endfor %}
         </div>
       {% endif %}
 
-      <!-- Generated Feasible Solutions Grid -->
-      <h2 style="font-size: 1.2rem; font-weight: 700; margin-bottom: 1rem;">Generated Feasible Solutions</h2>
+      <!-- Retained Alternative Solutions -->
+      <h3 style="font-size: 1.2rem; font-weight: 700; margin-bottom: 1rem;">Generated Feasible Solutions</h3>
 
       {% if selected_run.solutions %}
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.25rem; margin-bottom: 1.5rem;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.25rem;">
           {% for s in selected_run.solutions %}
             {% set eff = s.indicators.get('efficiency', {}) %}
             {% set fair = s.indicators.get('fairness', {}) %}
-            {% set won_badges = solution_badges.get(s.id, []) %}
-            {% set next_sol = selected_run.solutions[(loop.index) % (selected_run.solutions|length)] %}
 
-            <div id="sol-{{ s.alternative_number }}"
-                 class="card {% if won_badges %}sol-recommended-card{% endif %}"
-                 style="margin-bottom: 0;">
-              <div class="card-header" style="background: #f8fafc; align-items: flex-start; gap: 0.75rem;">
+            <div class="card" style="margin-bottom: 0;">
+              <div class="card-header" style="background: #f8fafc;">
                 <div>
-                  <h3 style="font-size: 1.05rem; font-weight: 700;">
+                  <h4 style="font-size: 1.05rem; font-weight: 700;">
                     Alternative #{{ s.alternative_number }}
-                  </h3>
-                  <span class="badge badge-secondary" style="margin-top: 0.25rem;">{{ s.strategy_name }}</span>
+                  </h4>
+                  <span class="badge badge-secondary">{{ s.strategy_name }}</span>
                 </div>
-                <div style="display: flex; gap: 0.4rem; flex-wrap: wrap; justify-content: flex-end;">
-                  {% if selected_run.solutions|length >= 2 and not is_stale_run %}
-                    <a href="{{ url_for('visualization_web.compare_solutions', sol1=s.id, sol2=next_sol.id) }}"
-                       class="btn btn-sm btn-secondary"
-                       title="Compare Alt #{{ s.alternative_number }} vs Alt #{{ next_sol.alternative_number }}">
-                      Compare
-                    </a>
-                  {% endif %}
-                  <a href="{{ url_for('visualization_web.view_solution', solution_id=s.id) }}"
-                     class="btn btn-sm btn-primary">
-                    Explore Allocations &rarr;
-                  </a>
-                </div>
+                <a href="{{ url_for('visualization_web.view_solution', solution_id=s.id) }}" class="btn btn-sm btn-primary">
+                  Explore Allocations &rarr;
+                </a>
               </div>
 
               <div class="card-body">
-                {% if won_badges %}
-                  <div style="display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.9rem;">
-                    {% for rec_idx, focus_name in won_badges %}
-                      <a href="{{ url_for('visualization_web.view_recommendations', run_id=selected_run.id) }}#rec-{{ rec_idx }}"
-                         class="badge {% if rec_idx == 1 %}badge-success{% elif rec_idx == 2 %}badge-primary{% else %}badge-secondary{% endif %}"
-                         style="text-decoration: none; padding: 0.3rem 0.6rem;"
-                         title="Recommended for {{ focus_name }}">
-                        &#9733; Recommended: {{ focus_name }}
-                      </a>
-                    {% endfor %}
-                  </div>
-                {% endif %}
-
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem;">
                   <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.6rem;">
                     <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600;">AVG SKILL FIT</div>
@@ -237,60 +243,10 @@
           {% if selected_run.status == 'FAILED' %}
             The solver stopped before finding an allocation. This does not mean the constraints are wrong, so try the run again.
           {% else %}
-            No feasible solutions were generated for this run. Review constraint diagnostics below.
+            No feasible solutions were generated for this run. Review constraint diagnostics above.
           {% endif %}
         </p>
       {% endif %}
-
-      <!-- Role-Safe Run Diagnostics & Solver Notes -->
-      <div style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.25rem;">
-        <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem;">Run Diagnostics &amp; Solver Notes:</h3>
-        {% if selected_run.diagnostics.get('message') %}
-          <p style="color: var(--text-main); margin-bottom: 0.5rem;">
-            <strong>{{ selected_run.diagnostics.get('message') }}</strong>
-          </p>
-        {% endif %}
-        {# Reasons, errors, warnings and notes can name students (for example
-           "Student 'Alice Chen' (S01) has submitted no ranked preferences"), so
-           the Student Viewer only learns that they exist. #}
-        {% if not can_view_records %}
-          {% if selected_run.diagnostics.get('reasons') or selected_run.diagnostics.get('errors') or selected_run.diagnostics.get('warnings') or selected_run.diagnostics.get('notes') %}
-            <p style="color: var(--text-muted); font-size: 0.88rem;">
-              Detailed diagnostics are hidden for this role because they can name individual students.
-            </p>
-          {% endif %}
-        {% else %}
-          {% if selected_run.diagnostics.get('reasons') %}
-            <ul style="color: var(--danger); margin-left: 1.5rem; margin-bottom: 0.5rem;">
-              {% for r in selected_run.diagnostics.get('reasons') %}
-                <li>{{ r }}</li>
-              {% endfor %}
-            </ul>
-          {% endif %}
-          {% if selected_run.diagnostics.get('errors') %}
-            <ul style="color: var(--danger); margin-left: 1.5rem; margin-bottom: 0.5rem;">
-              {% for err in selected_run.diagnostics.get('errors') %}
-                <li>{{ err }}</li>
-              {% endfor %}
-            </ul>
-          {% endif %}
-          {% if selected_run.diagnostics.get('warnings') %}
-            <div style="margin-top: 0.5rem;">
-              <strong style="color: var(--warning); font-size: 0.88rem;">Notices &amp; Warnings:</strong>
-              <ul style="color: #b45309; margin-left: 1.5rem; font-size: 0.88rem;">
-                {% for w in selected_run.diagnostics.get('warnings') %}
-                  <li>{{ w }}</li>
-                {% endfor %}
-              </ul>
-            </div>
-          {% endif %}
-          {% if selected_run.diagnostics.get('notes') %}
-            <p style="color: var(--text-muted); font-size: 0.88rem; margin-top: 0.4rem;">
-              {{ selected_run.diagnostics.get('notes') }}
-            </p>
-          {% endif %}
-        {% endif %}
-      </div>
     </div>
   </div>
 
@@ -301,7 +257,7 @@
       </div>
       <div class="card-body" style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;">
         <p style="color: var(--text-muted); margin: 0;">
-          Wipes all recorded optimization runs and solutions from the database while keeping cohort data intact.
+          Wipes all optimization runs and solutions from the database while keeping cohort data intact.
         </p>
         <form action="{{ url_for('visualization_web.clear_solutions') }}" method="POST"
               onsubmit="return confirm('Clear all solutions?');">
@@ -317,12 +273,12 @@
   <!-- Empty State when Zero Runs Exist -->
   <div class="card">
     <div class="card-header">
-      <h1 class="card-title" style="font-size: 1.35rem;">Solutions &amp; Decision Overview</h1>
+      <h2 class="card-title" style="font-size: 1.35rem;">Solutions &amp; Decision Overview</h2>
     </div>
     <div class="card-body" style="text-align: center; padding: 3rem 1.5rem;">
-      <h2 style="font-size: 1.15rem; font-weight: 600; margin-bottom: 0.5rem;">
+      <h3 style="font-size: 1.15rem; font-weight: 600; margin-bottom: 0.5rem;">
         No Optimization Solutions Generated Yet
-      </h2>
+      </h3>
       {% if can_optimize %}
         <p style="color: var(--text-muted); max-width: 540px; margin: 0 auto 1.25rem auto;">
           Launch an assignment optimization run from the Dashboard to generate distinct Pareto-optimal alternatives and policy recommendations.
