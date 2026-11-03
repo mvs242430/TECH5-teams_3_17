@@ -32,5 +32,5 @@ Whenever an issue implementation is finished—and **strictly before** running `
    - **Zero Shared Context:** Pass **only** the path to the issue file (e.g., `docs/team_related/issues/A1.1.md`). Never pass your implementation reasoning or conversation summary to the QA subagent.
 3. **Block Commit/Push Until `PASS`:**
    - If `qa-tester` returns `FAIL`, resolve all findings first and re-run `qa-tester`.
-   - Only when `qa-tester` returns `PASS` (confirming feature branch isolation, allowed file scope, intact tests, and passing `python -m pytest -q`) and the student confirms understanding under the **Explain-Before-Accept** policy may you proceed with `git add`, `git commit`, and `git push -u origin <branch-name>`.
-4. **Never Force Push:** Never run `git push --force` or push directly to `main`.
+   - Only when `qa-tester` returns `PASS` (confirming feature branch isolation, allowed file scope, intact tests, and passing `python -m pytest -q`) and the student confirms understanding under the **Explain-Before-Accept** policy may you proceed with `git add`, `git commit`, `git push -u origin <branch-name>`, and—when requested by the user—merging the verified branch into `main` and pushing to remote (`git push origin main`).
+4. **Never Force Push:** Never run `git push --force`. Merging a QA-verified feature branch into `main` and pushing `main` to remote (`git push origin main`) is permitted when requested by the user.
