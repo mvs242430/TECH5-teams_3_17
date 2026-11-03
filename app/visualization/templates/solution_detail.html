@@ -22,6 +22,18 @@
 {% set fair = solution.indicators.get('fairness', {}) %}
 {% set cap = solution.indicators.get('capacity', {}) %}
 
+<!-- Notices saved with this solution -->
+{% if solution.warnings %}
+  <div class="alert alert-warning" style="align-items: flex-start; flex-direction: column; gap: 0.25rem;">
+    <strong>Notices &amp; Warnings:</strong>
+    <ul style="margin-left: 1.25rem; font-size: 0.88rem;">
+      {% for w in solution.warnings %}
+        <li>{{ w }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+{% endif %}
+
 <!-- Solution KPI Grid -->
 <div class="kpi-grid">
   <div class="kpi-card">
@@ -78,7 +90,7 @@
             <th>Preference Rank</th>
             <th>Skill Fit Match</th>
             <th>Status / Unmet Skills</th>
-            {% if can_optimize %}<th>Interactive Rerun</th>{% endif %}
+            {% if can_optimize and can_manage_locks %}<th>Interactive Rerun</th>{% endif %}
           </tr>
         </thead>
         <tbody>
@@ -131,7 +143,7 @@
                   <span style="color: var(--success); font-size: 0.85rem;">&#10003; Full Fit</span>
                 {% endif %}
               </td>
-              {% if can_optimize %}
+              {% if can_optimize and can_manage_locks %}
                 <td>
                   {% if not asg.is_fixed %}
                     <form action="{{ url_for('visualization_web.lock_and_rerun', solution_id=solution.id) }}" method="POST" onsubmit="return confirm('Are you sure you want to lock student {{ asg.student_id }} to project {{ asg.project_id }} and re-run optimization?');">

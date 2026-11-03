@@ -1,6 +1,7 @@
 """Tests for Component A (Visualization & Recommendation) web workflows."""
 
 import pathlib
+from typing import Any
 
 import pytest
 
@@ -8,6 +9,7 @@ from app import create_app
 from app.contract import contract
 from app.contract import mocks
 from app.domain import models
+from app.engine import strategies
 from app.persistence import repositories
 from app.samples import demo_data
 
@@ -1109,6 +1111,261 @@ def test_compare_same_cohort_across_runs_still_works(
     assert b"Changed Student Allocations" in res.data
 
 
+def test_compare_shows_worst_rank_delta(real_engine_client) -> None:
+    """The page shows the worst-rank change, signed as B minus A."""
+    run = _load_and_run(real_engine_client)
+    alt_1, alt_2 = run.solutions[0], run.solutions[1]
+    delta = (
+        alt_2.indicators["fairness"]["worst_rank"]
+        - alt_1.indicators["fairness"]["worst_rank"]
+    )
+    assert delta == 1
+
+    res = real_engine_client.get(f"/compare?sol1={alt_1.id}&sol2={alt_2.id}")
+
+    page = res.get_data(as_text=True)
+    card = page.split("&Delta; Worst Rank", maxsplit=1)[1].split(
+        "kpi-sub", maxsplit=1
+    )[0]
+    assert "text-danger" in card
+    assert "+1" in card
+    assert "Worst individual preference rank worsened by 1." in page
+
+
+def test_compare_shows_improved_worst_rank_as_good(real_engine_client) -> None:
+    """Swapping A and B flips the sign and the colour of the same change."""
+    run = _load_and_run(real_engine_client)
+    alt_1, alt_2 = run.solutions[0], run.solutions[1]
+
+    res = real_engine_client.get(f"/compare?sol1={alt_2.id}&sol2={alt_1.id}")
+
+    card = res.get_data(as_text=True).split(
+        "&Delta; Worst Rank", maxsplit=1
+    )[1].split("kpi-sub", maxsplit=1)[0]
+    assert "text-success" in card
+    assert "-1" in card
+
+
+def test_recommendations_do_not_claim_mathematical_optimality(
+    real_engine_client,
+) -> None:
+    """A recommendation is the best alternative of the run, nothing more."""
+    run = _load_and_run(real_engine_client)
+
+    res = real_engine_client.get(f"/recommendations/{run.id}")
+
+    assert res.status_code == 200
+    assert b"mathematically optimal" not in res.data
+    assert b"alternatives for that focus" in res.data
+
+
+def test_lock_and_rerun_stopped_by_time_limit_does_not_claim_infeasible(
+    real_engine_client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A rerun that stops without a proof warns without saying impossible."""
+    run = _load_and_run(real_engine_client)
+    assignment = run.solutions[0].assignments[0]
+    monkeypatch.setattr(
+        strategies._PyomoAssignmentStrategy,
+        "solve",
+        lambda *args, **kwargs: (
+            "TIME_LIMIT",
+            [],
+            None,
+            {"termination_condition": "maxTimeLimit"},
+        ),
+    )
+
+    res = real_engine_client.post(
+        f"/solutions/{run.solutions[0].id}/lock-and-rerun",
+        data={
+            "student_id": assignment.student_id,
+            "project_id": assignment.project_id,
+        },
+        follow_redirects=True,
+    )
+
+    assert res.status_code == 200
+    assert b"that the lock is impossible" in res.data
+    assert b"could not find a feasible solution" not in res.data
+    assert repositories.RunRepository().list_runs()[0].status == "FAILED"
+
+
+def _lock_first_assignment(client: Any, run: models.AssignmentRun) -> Any:
+    """Posts Lock & Rerun for the first assignment of the first solution."""
+    solution = run.solutions[0]
+    return client.post(
+        f"/solutions/{solution.id}/lock-and-rerun",
+        data={
+            "student_id": solution.assignments[0].student_id,
+            "project_id": solution.assignments[0].project_id,
+        },
+        follow_redirects=True,
+    )
+
+
+def _assert_rerun_is_not_reported_as_success(page: bytes) -> None:
+    """Checks that a rerun with no solution warns and shows the saved lock."""
+    assert b"students changed" not in page
+    assert b"Compare with previous run" not in page
+    assert b"alert-success" not in page
+    assert b"is still locked to Project" in page
+    assert b"Review fixed locks" in page
+
+
+@pytest.mark.parametrize(
+    ("solver_status", "run_status", "expected_warning"),
+    [
+        ("TIME_LIMIT", "FAILED", b"that the lock is impossible"),
+        ("INFEASIBLE", "INFEASIBLE", b"could not find a feasible solution"),
+    ],
+)
+def test_lock_and_rerun_without_solution_is_not_a_success(
+    real_engine_client,
+    monkeypatch: pytest.MonkeyPatch,
+    solver_status: str,
+    run_status: str,
+    expected_warning: bytes,
+) -> None:
+    """A rerun that ends in the solver with no allocation only warns."""
+    run = _load_and_run(real_engine_client)
+    monkeypatch.setattr(
+        strategies._PyomoAssignmentStrategy,
+        "solve",
+        lambda *args, **kwargs: (solver_status, [], None, {}),
+    )
+
+    res = _lock_first_assignment(real_engine_client, run)
+
+    assert repositories.RunRepository().list_runs()[0].status == run_status
+    assert expected_warning in res.data
+    _assert_rerun_is_not_reported_as_success(res.data)
+
+
+def test_lock_and_rerun_over_capacity_is_not_a_success(
+    real_engine_client,
+) -> None:
+    """A real lock that overfills a project only warns."""
+    solution = _load_and_run(real_engine_client).solutions[0]
+    project = repositories.ProjectRepository().list_all()[0]
+    student_ids = [s.id for s in repositories.StudentRepository().list_all()]
+    fixed_repo = repositories.FixedAssignmentRepository()
+    for student_id in student_ids[: project.max_capacity]:
+        fixed_repo.save(
+            models.FixedAssignment(
+                student_id=student_id,
+                project_id=project.id,
+                status="APPROVED",
+                reason="Fills the project for this test.",
+            )
+        )
+
+    res = real_engine_client.post(
+        f"/solutions/{solution.id}/lock-and-rerun",
+        data={
+            "student_id": student_ids[project.max_capacity],
+            "project_id": project.id,
+        },
+        follow_redirects=True,
+    )
+
+    assert repositories.RunRepository().list_runs()[0].status == "INFEASIBLE"
+    assert b"could not find a feasible solution" in res.data
+    _assert_rerun_is_not_reported_as_success(res.data)
+
+
+def test_failed_run_page_does_not_blame_constraints(
+    real_engine_client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A run with no proof says so, and does not point at the constraints."""
+    real_engine_client.post("/load-scenario/standard", follow_redirects=True)
+    monkeypatch.setattr(
+        strategies._PyomoAssignmentStrategy,
+        "solve",
+        lambda *args, **kwargs: ("TIME_LIMIT", [], None, {}),
+    )
+
+    run = _run_engine(real_engine_client)
+    res = real_engine_client.get(f"/runs/{run.id}")
+
+    assert run.status == "FAILED"
+    assert b"Review constraint diagnostics" not in res.data
+    assert b"does not mean the constraints are wrong" in res.data
+
+
+def test_infeasible_run_page_still_points_to_constraints(
+    real_engine_client,
+) -> None:
+    """An infeasible run keeps the pointer to its constraint diagnostics."""
+    run = _load_and_run(real_engine_client, "infeasible")
+
+    res = real_engine_client.get(f"/runs/{run.id}")
+
+    assert run.status == "INFEASIBLE"
+    assert b"Review constraint diagnostics" in res.data
+
+
+def _stop_early_on_solve(
+    monkeypatch: pytest.MonkeyPatch, solve_number: int
+) -> None:
+    """Makes one solve of a run stop early, keeping its real allocation."""
+    real_solve = strategies._PyomoAssignmentStrategy.solve
+    solves_done: list[int] = []
+
+    def solve(self, *args: Any, **kwargs: Any) -> Any:
+        solves_done.append(1)
+        status, assignments, objective, diagnostics = real_solve(
+            self, *args, **kwargs
+        )
+        if len(solves_done) == solve_number:
+            status = "FEASIBLE"
+            diagnostics = {
+                **diagnostics,
+                "termination_condition": "maxTimeLimit",
+            }
+        return status, assignments, objective, diagnostics
+
+    monkeypatch.setattr(strategies._PyomoAssignmentStrategy, "solve", solve)
+
+
+def test_solution_page_warns_only_on_unproven_solution(
+    real_engine_client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only the alternative that stopped early carries the warning."""
+    _stop_early_on_solve(monkeypatch, solve_number=2)
+    run = _load_and_run(real_engine_client)
+    proven, unproven = run.solutions[0], run.solutions[1]
+
+    proven_res = real_engine_client.get(f"/solutions/{proven.id}")
+    unproven_res = real_engine_client.get(f"/solutions/{unproven.id}")
+
+    assert b"not proven optimal" not in proven_res.data
+    assert b"not proven optimal" in unproven_res.data
+
+
+def test_recommendations_name_unproven_alternatives(
+    real_engine_client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The recommendations page names the alternative that stopped early."""
+    _stop_early_on_solve(monkeypatch, solve_number=2)
+    run = _load_and_run(real_engine_client)
+
+    res = real_engine_client.get(f"/recommendations/{run.id}")
+
+    assert b"Not proven optimal: Alt 2." in res.data
+
+
+def test_proven_run_has_no_unproven_notes(real_engine_client) -> None:
+    """A normal run shows no unproven note on either page."""
+    run = _load_and_run(real_engine_client)
+
+    solution_res = real_engine_client.get(f"/solutions/{run.solutions[0].id}")
+    recommendations_res = real_engine_client.get(f"/recommendations/{run.id}")
+
+    assert b"not proven optimal" not in solution_res.data
+    assert b"Not proven optimal" not in recommendations_res.data
+
+
 def test_compare_different_students_shows_message(real_engine_client) -> None:
     """A 10-student and an 11-student solution give a message, not a crash."""
     before = _load_and_run(real_engine_client)
@@ -1192,6 +1449,398 @@ def test_solution_ids_with_assignments_skips_emptied_solutions(
 
     assert {sol.id for sol in new.solutions} == ids
     assert not ids & {sol.id for sol in old.solutions}
+
+
+# -----------------------------------------------------------------------------
+# Role checks on routes that delete data (clear data, clear solutions,
+# load scenario)
+# -----------------------------------------------------------------------------
+
+PERMISSION_DENIED = b"Permission denied for current role."
+
+
+@pytest.fixture
+def standard_client(tmp_path: pathlib.Path) -> Any:
+    """Test client with the standard benchmark and one saved mock run.
+
+    The data is seeded as the default Admin role; each test then switches
+    to the role it checks.
+    """
+    db_file = tmp_path / "test_delete_roles.db"
+    app = create_app({"TESTING": True, "DATABASE_PATH": db_file})
+    client = app.test_client()
+    client.post("/load-scenario/standard", follow_redirects=True)
+    mocks.MockAssignmentEngine().execute_run(
+        contract.RunRequest(
+            students=repositories.StudentRepository().list_all(),
+            projects=repositories.ProjectRepository().list_all(),
+            skills=repositories.SkillRepository().list_all(),
+            strategy_key="PREFERENCE",
+            max_alternatives=2,
+        )
+    )
+    return client
+
+
+def _switch_role(client: Any, role: str) -> None:
+    """Switches the active role of the test client."""
+    client.post("/set-role", data={"role": role}, follow_redirects=True)
+
+
+def _student_ids() -> set[str]:
+    """Returns the IDs of all students in the database."""
+    return {s.id for s in repositories.StudentRepository().list_all()}
+
+
+def _run_ids() -> list[str]:
+    """Returns the IDs of all saved runs in the database."""
+    return [r.id for r in repositories.RunRepository().list_runs(limit=100)]
+
+
+@pytest.mark.parametrize("role", ["COORDINATOR", "STUDENT"])
+def test_clear_data_is_denied_for_non_admin(
+    standard_client, role: str
+) -> None:
+    """Only the Administrator may wipe the cohort; the data stays."""
+    students_before = _student_ids()
+    projects_before = len(repositories.ProjectRepository().list_all())
+    assert students_before and projects_before
+    _switch_role(standard_client, role)
+
+    res = standard_client.post("/clear-data", follow_redirects=True)
+
+    assert res.status_code == 200
+    assert PERMISSION_DENIED in res.data
+    assert res.request.path == "/"
+    assert _student_ids() == students_before
+    assert len(repositories.ProjectRepository().list_all()) == projects_before
+
+
+def test_clear_data_still_works_for_admin(standard_client) -> None:
+    """The Administrator can still wipe the cohort."""
+    _switch_role(standard_client, "ADMIN")
+
+    res = standard_client.post("/clear-data", follow_redirects=True)
+
+    assert res.status_code == 200
+    assert b"All cohort data cleared." in res.data
+    assert _student_ids() == set()
+    assert repositories.ProjectRepository().list_all() == []
+
+
+@pytest.mark.parametrize("role", ["COORDINATOR", "STUDENT"])
+def test_load_scenario_is_denied_for_non_admin(
+    standard_client, role: str
+) -> None:
+    """Loading a scenario first wipes the cohort, so only the Admin may."""
+    # A student that no scenario contains shows whether the wipe ran.
+    repositories.StudentRepository().save(
+        models.Student(id="S_KEEP", display_name="Not in any scenario")
+    )
+    students_before = _student_ids()
+    _switch_role(standard_client, role)
+
+    res = standard_client.post("/load-scenario/fixed", follow_redirects=True)
+
+    assert res.status_code == 200
+    assert PERMISSION_DENIED in res.data
+    assert res.request.path == "/"
+    assert _student_ids() == students_before
+    assert repositories.FixedAssignmentRepository().list_all() == []
+
+
+def test_load_scenario_still_works_for_admin(standard_client) -> None:
+    """The Administrator can still replace the cohort with a scenario."""
+    repositories.StudentRepository().save(
+        models.Student(id="S_KEEP", display_name="Not in any scenario")
+    )
+    _switch_role(standard_client, "ADMIN")
+
+    res = standard_client.post("/load-scenario/fixed", follow_redirects=True)
+
+    assert res.status_code == 200
+    assert b"loaded successfully" in res.data
+    assert "S_KEEP" not in _student_ids()
+    assert len(repositories.FixedAssignmentRepository().list_all()) == 1
+
+
+def test_load_unknown_scenario_keeps_cohort(standard_client) -> None:
+    """A mistyped scenario name is refused before anything is deleted."""
+    students_before = _student_ids()
+    projects_before = len(repositories.ProjectRepository().list_all())
+    assert students_before and projects_before
+    _switch_role(standard_client, "ADMIN")
+
+    res = standard_client.post("/load-scenario/typo", follow_redirects=True)
+
+    assert res.status_code == 200
+    assert b"Unknown scenario" in res.data
+    assert _student_ids() == students_before
+    assert len(repositories.ProjectRepository().list_all()) == projects_before
+
+
+def test_clear_solutions_is_denied_for_student_viewer(standard_client) -> None:
+    """A Student Viewer cannot delete runs; the saved run stays."""
+    runs_before = _run_ids()
+    assert runs_before
+    _switch_role(standard_client, "STUDENT")
+
+    res = standard_client.post("/clear-solutions", follow_redirects=True)
+
+    assert res.status_code == 200
+    assert PERMISSION_DENIED in res.data
+    assert res.request.path == "/"
+    assert _run_ids() == runs_before
+
+
+@pytest.mark.parametrize("role", ["ADMIN", "COORDINATOR"])
+def test_clear_solutions_still_works_for_run_roles(
+    standard_client, role: str
+) -> None:
+    """Roles that can create runs can delete them; the cohort stays."""
+    students_before = _student_ids()
+    _switch_role(standard_client, role)
+
+    res = standard_client.post("/clear-solutions", follow_redirects=True)
+
+    assert res.status_code == 200
+    assert b"All solutions cleared." in res.data
+    assert _run_ids() == []
+    assert _student_ids() == students_before
+
+
+@pytest.mark.parametrize(
+    ("role", "sees_cohort_buttons", "sees_clear_solutions"),
+    [
+        ("ADMIN", True, True),
+        ("COORDINATOR", False, True),
+        ("STUDENT", False, False),
+    ],
+)
+def test_delete_buttons_shown_only_to_allowed_roles(
+    standard_client,
+    role: str,
+    sees_cohort_buttons: bool,
+    sees_clear_solutions: bool,
+) -> None:
+    """Dashboard and scenarios pages hide buttons the role cannot use."""
+    _switch_role(standard_client, role)
+
+    dashboard = standard_client.get("/").get_data(as_text=True)
+    scenarios = standard_client.get("/scenarios").get_data(as_text=True)
+
+    assert ("/load-scenario/" in dashboard) is sees_cohort_buttons
+    assert ("/load-scenario/" in scenarios) is sees_cohort_buttons
+    assert ("/clear-data" in scenarios) is sees_cohort_buttons
+    assert ("/clear-solutions" in dashboard) is sees_clear_solutions
+
+
+# -----------------------------------------------------------------------------
+# Issue A2.4 - Who can do what (access check)
+# -----------------------------------------------------------------------------
+
+# Every POST route that changes data, with form data that an allowed role
+# could post successfully. "{solution_id}" is replaced by a saved solution.
+MUTATING_ROUTES = [
+    (
+        "/students/new",
+        {"id": "S_NEW", "display_name": "New", "preferences_text": "P1"},
+    ),
+    (
+        "/students/S01/edit",
+        {"display_name": "Renamed", "preferences_text": "P1, P2, P3"},
+    ),
+    ("/students/S01/delete", {}),
+    (
+        "/projects/new",
+        {
+            "id": "P_NEW",
+            "title": "New",
+            "min_capacity": "1",
+            "max_capacity": "3",
+        },
+    ),
+    (
+        "/projects/P1/edit",
+        {"title": "Renamed", "min_capacity": "1", "max_capacity": "3"},
+    ),
+    ("/projects/P1/delete", {}),
+    ("/skills/new", {"id": "go", "name": "Go", "description": ""}),
+    ("/skills/rust/delete", {}),
+    ("/fixed-assignments/new", {"student_id": "S01", "project_id": "P2"}),
+    ("/fixed-assignments/S02/delete", {}),
+    ("/load-scenario/fixed", {}),
+    ("/clear-data", {}),
+    ("/clear-solutions", {}),
+    (
+        "/runs/trigger",
+        {"primary_strategy": "PREFERENCE", "max_alternatives": "1"},
+    ),
+    (
+        "/solutions/{solution_id}/lock-and-rerun",
+        {"student_id": "S01", "project_id": "P2"},
+    ),
+]
+
+# POST routes that change only the session, never the database.
+SESSION_ONLY_ENDPOINTS = {"visualization_web.set_role"}
+
+
+def _seed_mutation_targets() -> str:
+    """Adds rows the routes above act on and returns a saved solution ID.
+
+    Adds a skill no project requires (so it can be deleted) and one fixed
+    lock (so it can be released).
+
+    Returns:
+        The ID of the first solution of the run saved by `standard_client`.
+    """
+    repositories.SkillRepository().save(
+        models.Skill(id="rust", name="Rust", description="")
+    )
+    repositories.FixedAssignmentRepository().save(
+        models.FixedAssignment(student_id="S02", project_id="P2")
+    )
+    return repositories.RunRepository().list_runs()[0].solutions[0].id
+
+
+def _db_snapshot() -> dict[str, list[tuple[Any, ...]]]:
+    """Returns every row of every table, so any change to the data shows."""
+    db = repositories.ProjectRepository().db
+    tables = db.execute_query(
+        "SELECT name FROM sqlite_master "
+        "WHERE type = 'table' AND name NOT LIKE 'sqlite_%';"
+    )
+    snapshot: dict[str, list[tuple[Any, ...]]] = {}
+    for table in tables:
+        rows = db.execute_query(f"SELECT * FROM {table['name']};")
+        # Sort by repr so rows with NULLs still sort without a TypeError.
+        snapshot[table["name"]] = sorted(
+            (tuple(row) for row in rows), key=repr
+        )
+    return snapshot
+
+
+@pytest.mark.parametrize(("path", "form"), MUTATING_ROUTES)
+def test_student_viewer_cannot_mutate(
+    standard_client, path: str, form: dict[str, str]
+) -> None:
+    """A Student Viewer is refused on every data route; nothing changes."""
+    solution_id = _seed_mutation_targets()
+    before = _db_snapshot()
+    _switch_role(standard_client, "STUDENT")
+
+    res = standard_client.post(
+        path.format(solution_id=solution_id), data=form, follow_redirects=True
+    )
+
+    assert res.status_code == 200
+    assert PERMISSION_DENIED in res.data
+    assert _db_snapshot() == before
+
+
+@pytest.mark.parametrize(("path", "form"), MUTATING_ROUTES)
+def test_admin_post_to_mutating_route_changes_data(
+    standard_client, path: str, form: dict[str, str]
+) -> None:
+    """Control: each request above does change data for an allowed role.
+
+    Without this, "nothing changed" in the Student Viewer test could come
+    from bad form data rather than from the role check.
+    """
+    solution_id = _seed_mutation_targets()
+    before = _db_snapshot()
+    _switch_role(standard_client, "ADMIN")
+
+    res = standard_client.post(
+        path.format(solution_id=solution_id), data=form, follow_redirects=True
+    )
+
+    assert res.status_code == 200
+    assert PERMISSION_DENIED not in res.data
+    assert _db_snapshot() != before
+
+
+def test_mutating_route_list_covers_every_post_route(standard_client) -> None:
+    """A new POST route fails this test until it is added to the list."""
+    url_map = standard_client.application.url_map
+    adapter = url_map.bind("localhost")
+    listed = {
+        adapter.match(path.format(solution_id="x"), method="POST")[0]
+        for path, _ in MUTATING_ROUTES
+    }
+    registered = {
+        rule.endpoint
+        for rule in url_map.iter_rules()
+        if "POST" in rule.methods
+    }
+
+    assert listed | SESSION_ONLY_ENDPOINTS == registered
+
+
+@pytest.mark.parametrize("role", ["ADMIN", "COORDINATOR"])
+def test_lock_roles_can_create_fixed_assignment(
+    standard_client, role: str
+) -> None:
+    """Admin and Coordinator may lock a student to a project."""
+    _switch_role(standard_client, role)
+
+    res = standard_client.post(
+        "/fixed-assignments/new",
+        data={"student_id": "S01", "project_id": "P2", "reason": "Sponsor"},
+        follow_redirects=True,
+    )
+
+    assert res.status_code == 200
+    assert b"Fixed assignment created" in res.data
+    locks = repositories.FixedAssignmentRepository().list_all()
+    assert [(fa.student_id, fa.project_id) for fa in locks] == [("S01", "P2")]
+
+
+@pytest.mark.parametrize("role", ["ADMIN", "COORDINATOR"])
+def test_lock_roles_can_release_fixed_assignment(
+    standard_client, role: str
+) -> None:
+    """Admin and Coordinator may release an existing lock."""
+    repositories.FixedAssignmentRepository().save(
+        models.FixedAssignment(student_id="S02", project_id="P2")
+    )
+    _switch_role(standard_client, role)
+
+    res = standard_client.post(
+        "/fixed-assignments/S02/delete", follow_redirects=True
+    )
+
+    assert res.status_code == 200
+    assert b"Fixed assignment for student &#39;S02&#39; removed." in res.data
+    assert repositories.FixedAssignmentRepository().list_all() == []
+
+
+@pytest.mark.parametrize(
+    ("role", "sees_lock_controls"),
+    [("ADMIN", True), ("COORDINATOR", True), ("STUDENT", False)],
+)
+def test_lock_controls_shown_only_to_lock_roles(
+    standard_client, role: str, sees_lock_controls: bool
+) -> None:
+    """Lock form, Release and Lock & Rerun buttons follow the role check."""
+    solution_id = _seed_mutation_targets()
+    _switch_role(standard_client, role)
+
+    locks_page = standard_client.get("/fixed-assignments").get_data(
+        as_text=True
+    )
+    solution_page = standard_client.get(
+        f"/solutions/{solution_id}"
+    ).get_data(as_text=True)
+
+    assert ('action="/fixed-assignments/new"' in locks_page) is (
+        sees_lock_controls
+    )
+    assert ("/fixed-assignments/S02/delete" in locks_page) is (
+        sees_lock_controls
+    )
+    assert ("/lock-and-rerun" in solution_page) is sees_lock_controls
 
 
 # -----------------------------------------------------------------------------

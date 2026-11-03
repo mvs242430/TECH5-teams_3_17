@@ -27,6 +27,16 @@
     .card-accent-3 { border-left: 5px solid #475569; }
   </style>
 
+  {# ── Alternatives kept without an optimality proof ─────────────────────── #}
+  {% if unproven_alternatives %}
+    <div class="alert alert-warning" style="align-items: flex-start; flex-direction: column; gap: 0.25rem;">
+      <strong>Not proven optimal: {% for number in unproven_alternatives %}Alt {{ number }}{{ ", " if not loop.last }}{% endfor %}.</strong>
+      <span style="font-size: 0.88rem;">
+        The solver stopped early. These alternatives meet all hard constraints, but a better allocation may exist.
+      </span>
+    </div>
+  {% endif %}
+
   {# ── At-a-glance summary strip ─────────────────────────────────────────── #}
   <div class="kpi-grid" style="margin-bottom: 2rem;">
     {% for rec in recommendations %}
@@ -126,7 +136,7 @@
                           font-size: 0.82rem; color: var(--secondary);">
                 <strong>Governance Note:</strong> Final allocation decisions rest with the programme
                 committee. If stakeholder priorities emphasize this focus, Solution
-                {{ rec.recommended_alternative_number }} represents the mathematically optimal selection.
+                {{ rec.recommended_alternative_number }} is the best of this run's alternatives for that focus.
               </div>
             </div>
 

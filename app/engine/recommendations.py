@@ -20,7 +20,8 @@ class RecommendationItem:
             Student Satisfaction, Project Skill Delivery, Egalitarian Balance).
         recommended_solution_id: Identifier of the top solution for this focus.
         recommended_alternative_number: 1-based index of recommended solution.
-        criteria_used: Explicit list of analytical metrics evaluated.
+        criteria_used: Analytical metrics evaluated, in the order the
+            selection compares them (each one only breaks ties in the last).
         evidence: Objective calculated facts supporting the recommendation.
         advice: Practical normative advice describing operational trade-offs.
     """
@@ -85,9 +86,10 @@ def generate_recommendations(
             recommended_solution_id=best_pref_sol.id,
             recommended_alternative_number=best_pref_sol.alternative_number,
             criteria_used=[
+                "Count of students assigned outside stated preferences "
+                "(lower is better)",
                 "Average student preference rank (lower is better)",
-                "Count of students assigned outside stated preferences",
-                "Worst individual student rank",
+                "Worst individual student rank (lower is better)",
             ],
             evidence=[
                 f"Achieves average preference rank of "
@@ -115,6 +117,8 @@ def generate_recommendations(
             -s.indicators.get("efficiency", {}).get(
                 "unmet_soft_requirements_count", 999
             ),
+            # Equal on skills: prefer the solution students like more.
+            -s.indicators.get("fairness", {}).get("mean_rank", 999.0),
         ),
     )
     skill_indicators = best_skill_sol.indicators
@@ -129,6 +133,7 @@ def generate_recommendations(
             criteria_used=[
                 "Average student-project skill fit score (higher is better)",
                 "Total unmet soft skill requirements (lower is better)",
+                "Average student preference rank (lower is better)",
             ],
             evidence=[
                 f"Highest average skill fit score of "
@@ -167,7 +172,7 @@ def generate_recommendations(
             criteria_used=[
                 "Rank Gini coefficient (equality of outcome distribution)",
                 "Rank variance across students",
-                "Harmonized score between preference rank and skill fit",
+                "Average student preference rank (lower is better)",
             ],
             evidence=[
                 f"Lowest rank disparity (Gini coefficient: "

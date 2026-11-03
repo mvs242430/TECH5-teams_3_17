@@ -44,6 +44,7 @@ def inject_template_globals() -> dict[str, Any]:
         "all_roles": auth.UserRole.ALL_ROLES,
         "can_edit": auth.can_edit_cohort_data(),
         "can_optimize": auth.can_trigger_optimization(),
+        "can_manage_locks": auth.can_manage_fixed_assignments(),
     }
 
 
@@ -469,7 +470,7 @@ def update_student(student_id: str) -> flask.Response:
 def delete_student(student_id: str) -> flask.Response:
     """Deletes a student."""
     if not auth.can_edit_cohort_data():
-        flask.flash("Permission denied.", "danger")
+        flask.flash("Permission denied for current role.", "danger")
         return flask.redirect(flask.url_for("visualization_web.list_students"))
 
     repositories.StudentRepository().delete(student_id)
@@ -1083,8 +1084,9 @@ def list_fixed_assignments() -> str:
 def create_fixed_assignment() -> flask.Response:
     """Locks a student to a designated project."""
     target = flask.url_for("visualization_web.list_fixed_assignments")
-    if not auth.can_edit_cohort_data():
-        flask.flash("Permission denied.", "danger")
+    # Locks are solver inputs, so Admin and Coordinator manage them.
+    if not auth.can_manage_fixed_assignments():
+        flask.flash("Permission denied for current role.", "danger")
         return flask.redirect(target)
 
     s_id = flask.request.form.get("student_id", "").strip()
@@ -1144,8 +1146,8 @@ def create_fixed_assignment() -> flask.Response:
 def delete_fixed_assignment(student_id: str) -> flask.Response:
     """Removes a locked allocation."""
     target = flask.url_for("visualization_web.list_fixed_assignments")
-    if not auth.can_edit_cohort_data():
-        flask.flash("Permission denied.", "danger")
+    if not auth.can_manage_fixed_assignments():
+        flask.flash("Permission denied for current role.", "danger")
         return flask.redirect(target)
 
     repositories.FixedAssignmentRepository().delete(student_id)
@@ -1167,8 +1169,12 @@ def scenarios_page() -> str:
 @web_bp.post("/load-scenario/<scenario_name>")
 def load_scenario(scenario_name: str) -> flask.Response:
     """Populates database with a designated reproducible benchmark cohort."""
-    repo_run = repositories.RunRepository()
-    repo_run.clear_all_cohort_data()
+    # Loading replaces the whole cohort, so it needs cohort edit rights.
+    # The check runs before the wipe below, so a refused request deletes
+    # nothing.
+    if not auth.can_edit_cohort_data():
+        flask.flash("Permission denied for current role.", "danger")
+        return flask.redirect(flask.url_for("visualization_web.dashboard"))
 
     if scenario_name == "standard":
         data = demo_data.get_standard_scenario()
@@ -1181,6 +1187,10 @@ def load_scenario(scenario_name: str) -> flask.Response:
     else:
         flask.flash(f"Unknown scenario: '{scenario_name}'.", "warning")
         return flask.redirect(flask.url_for("visualization_web.scenarios_page"))
+
+    # Wipe only once the name is known, so a typo deletes nothing.
+    repo_run = repositories.RunRepository()
+    repo_run.clear_all_cohort_data()
 
     skill_repo = repositories.SkillRepository()
     for s in data["skills"]:
@@ -1209,6 +1219,10 @@ def load_scenario(scenario_name: str) -> flask.Response:
 @web_bp.post("/clear-data")
 def clear_data() -> flask.Response:
     """Clears all cohort and constraint data."""
+    if not auth.can_edit_cohort_data():
+        flask.flash("Permission denied for current role.", "danger")
+        return flask.redirect(flask.url_for("visualization_web.dashboard"))
+
     repositories.RunRepository().clear_all_cohort_data()
     flask.flash("All cohort data cleared.", "info")
     return flask.redirect(flask.url_for("visualization_web.dashboard"))
@@ -1316,10 +1330,52 @@ def view_solution(solution_id: str) -> Any:
     )
 
 
+def _flash_rerun_without_solution(
+    run_status: str, student_id: str, project_id: str
+) -> None:
+    """Warns that a Lock & Rerun ended without a solution.
+
+    Such a rerun moves no students, so the success message would mislead. The
+    lock itself stays saved, so the warning also says where to review it.
+
+    Args:
+        run_status: Status of the new run.
+        student_id: Identifier of the locked student.
+        project_id: Identifier of the locked project.
+    """
+    if run_status == "FAILED":
+        reason = (
+            "Solver stopped before finding a solution. This does not prove "
+            "that the lock is impossible."
+        )
+    else:
+        reason = "Solver could not find a feasible solution with this lock."
+
+    flask.flash(
+        markupsafe.Markup(
+            "{reason} Student {student_id} is still locked to Project "
+            '{project_id}. <a href="{url}" style="color: inherit; '
+            'text-decoration: underline; font-weight: 600; margin-left: '
+            '0.5rem;">Review fixed locks &rarr;</a>'
+        ).format(
+            reason=reason,
+            student_id=student_id,
+            project_id=project_id,
+            url=flask.url_for("visualization_web.list_fixed_assignments"),
+        ),
+        "warning",
+    )
+
+
 @web_bp.post("/solutions/<solution_id>/lock-and-rerun")
 def lock_and_rerun(solution_id: str) -> flask.Response:
     """Locks a student assignment from a solution and triggers a new run."""
-    if not auth.can_trigger_optimization():
+    # This route saves a fixed lock and then runs the solver, so the role
+    # needs both rights.
+    if not (
+        auth.can_manage_fixed_assignments()
+        and auth.can_trigger_optimization()
+    ):
         flask.flash("Permission denied for current role.", "danger")
         return flask.redirect(flask.url_for("visualization_web.dashboard"))
 
@@ -1420,33 +1476,27 @@ def lock_and_rerun(solution_id: str) -> flask.Response:
                     if orig_map.get(s_id) != p_id
                 )
 
-    compare_url = (
-        flask.url_for(
+    if new_solution_id:
+        compare_url = flask.url_for(
             "visualization_web.compare_solutions",
             sol1=solution_id,
             sol2=new_solution_id,
         )
-        if new_solution_id
-        else flask.url_for("visualization_web.compare_solutions")
-    )
-    compare_link_html = (
-        f'<a href="{compare_url}" style="color: inherit; text-decoration: '
-        f'underline; font-weight: 600; margin-left: 0.5rem;">'
-        f"Compare with previous run &rarr;</a>"
-    )
-    flask.flash(
-        markupsafe.Markup(
-            f"Student {student_id} locked to Project {project_id}. "
-            f"{changed_count} students changed compared with the previous run."
-            f" {compare_link_html}"
-        ),
-        "success",
-    )
-    if new_run.status == "INFEASIBLE":
-        flask.flash(
-            "Solver could not find a feasible solution with this lock.",
-            "warning",
+        compare_link_html = (
+            f'<a href="{compare_url}" style="color: inherit; text-decoration: '
+            f'underline; font-weight: 600; margin-left: 0.5rem;">'
+            f"Compare with previous run &rarr;</a>"
         )
+        flask.flash(
+            markupsafe.Markup(
+                f"Student {student_id} locked to Project {project_id}. "
+                f"{changed_count} students changed compared with the previous "
+                f"run. {compare_link_html}"
+            ),
+            "success",
+        )
+    else:
+        _flash_rerun_without_solution(new_run.status, student_id, project_id)
 
     return flask.redirect(
         flask.url_for("visualization_web.view_run", run_id=new_run.id)
@@ -1455,6 +1505,12 @@ def lock_and_rerun(solution_id: str) -> flask.Response:
 @web_bp.post("/clear-solutions")
 def clear_solutions() -> flask.Response:
     """Clears all solutions in the current run."""
+    # Runs and solutions belong to whoever may create them (Admin and
+    # Coordinator); cohort data is not touched here.
+    if not auth.can_trigger_optimization():
+        flask.flash("Permission denied for current role.", "danger")
+        return flask.redirect(flask.url_for("visualization_web.dashboard"))
+
     repositories.RunRepository().clear_all_current_solutions()
     flask.flash("All solutions cleared.", "info")
     return flask.redirect(flask.url_for("visualization_web.dashboard"))
@@ -1462,6 +1518,23 @@ def clear_solutions() -> flask.Response:
 # -----------------------------------------------------------------------------
 # Comparison & Recommendations
 # -----------------------------------------------------------------------------
+
+
+def _unproven_alternatives(solutions: list[models.Solution]) -> list[int]:
+    """Lists the alternatives the solver kept without proving them optimal.
+
+    Args:
+        solutions: Solutions of one run.
+
+    Returns:
+        Alternative numbers whose solve stopped before the optimality proof.
+        A solution with no saved stop reason makes no claim, so it is left out.
+    """
+    return [
+        s.alternative_number
+        for s in solutions
+        if s.diagnostics.get("termination_condition", "optimal") != "optimal"
+    ]
 
 
 @web_bp.get("/compare")
@@ -1602,4 +1675,5 @@ def view_recommendations(run_id: str) -> Any:
         "recommendations.html",
         run=run,
         recommendations=recs,
+        unproven_alternatives=_unproven_alternatives(run.solutions),
     )

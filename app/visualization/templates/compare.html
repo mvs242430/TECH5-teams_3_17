@@ -45,6 +45,7 @@
 
     {% if comparison and sol_a and sol_b %}
       {% set gini_delta = comparison.delta_metrics.get('gini_delta', 0.0) %}
+      {% set worst_rank_delta = comparison.delta_metrics.get('worst_rank_delta', 0) %}
       <!-- Comparative KPI Deltas -->
       <div class="kpi-grid">
         <div class="kpi-card">
@@ -73,6 +74,14 @@
             {% if comparison.delta_mean_rank > 0 %}+{% endif %}{{ comparison.delta_mean_rank }}
           </span>
           <span class="kpi-sub">Lower rank number is better</span>
+        </div>
+
+        <div class="kpi-card">
+          <span class="kpi-label">&Delta; Worst Rank</span>
+          <span class="kpi-value {% if worst_rank_delta < 0 %}text-success{% elif worst_rank_delta > 0 %}text-danger{% endif %}">
+            {% if worst_rank_delta > 0 %}+{% endif %}{{ worst_rank_delta }}
+          </span>
+          <span class="kpi-sub">Worst-off student; lower is better</span>
         </div>
 
         <div class="kpi-card">
