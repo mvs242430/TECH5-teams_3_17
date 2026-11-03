@@ -21,18 +21,22 @@
             Dashboard
           </a>
         </li>
+        {# Pages with individual student data are hidden from the Student Viewer #}
+        {% if can_view_records %}
         <li>
           <a href="{{ url_for('visualization_web.list_students') }}"
              class="{% if request.path.startswith(url_for('visualization_web.list_students')) %}active{% endif %}">
             Students
           </a>
         </li>
+        {% endif %}
         <li>
           <a href="{{ url_for('visualization_web.list_projects') }}"
              class="{% if request.path.startswith(url_for('visualization_web.list_projects')) %}active{% endif %}">
             Projects
           </a>
         </li>
+        {% if can_view_records %}
         <li>
           <a href="{{ url_for('visualization_web.preferences_overview') }}"
              class="{% if request.path.startswith(url_for('visualization_web.preferences_overview')) %}active{% endif %}">
@@ -45,6 +49,7 @@
             Fixed Locks
           </a>
         </li>
+        {% endif %}
         <li>
           <a href="{{ url_for('visualization_web.list_skills') }}"
              class="{% if request.path.startswith(url_for('visualization_web.list_skills')) %}active{% endif %}">
@@ -66,6 +71,7 @@
       </ul>
 
       <div class="nav-role-switcher">
+        {% if can_switch_roles %}
         <form action="{{ url_for('visualization_web.set_role') }}" method="POST" style="display: flex; align-items: center; gap: 0.5rem;">
           <label for="roleSelect">Role:</label>
           <select id="roleSelect" name="role" class="role-select" onchange="this.form.submit()">
@@ -74,6 +80,15 @@
             {% endfor %}
           </select>
         </form>
+        {% else %}
+        {# Only the Administrator switches roles. There is no login, so this
+           button stands in for signing in as Administrator again. #}
+        <form action="{{ url_for('visualization_web.set_role') }}" method="POST" style="display: flex; align-items: center; gap: 0.5rem;">
+          <span>Role: <strong>{{ all_roles.get(current_role, current_role) }}</strong></span>
+          <input type="hidden" name="role" value="ADMIN">
+          <button type="submit" class="btn btn-sm btn-secondary" style="white-space: nowrap;">Return to Administrator</button>
+        </form>
+        {% endif %}
       </div>
     </nav>
   </header>

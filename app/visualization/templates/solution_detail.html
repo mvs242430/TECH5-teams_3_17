@@ -22,8 +22,9 @@
 {% set fair = solution.indicators.get('fairness', {}) %}
 {% set cap = solution.indicators.get('capacity', {}) %}
 
-<!-- Notices saved with this solution -->
-{% if solution.warnings %}
+<!-- Notices saved with this solution. They can name students, so the
+     Student Viewer sees only how many there are. -->
+{% if solution.warnings and can_view_records %}
   <div class="alert alert-warning" style="align-items: flex-start; flex-direction: column; gap: 0.25rem;">
     <strong>Notices &amp; Warnings:</strong>
     <ul style="margin-left: 1.25rem; font-size: 0.88rem;">
@@ -31,6 +32,10 @@
         <li>{{ w }}</li>
       {% endfor %}
     </ul>
+  </div>
+{% elif solution.warnings %}
+  <div class="alert alert-warning">
+    This solution has {{ solution.warnings|length }} notice(s). They are hidden for this role because they can name individual students.
   </div>
 {% endif %}
 
@@ -81,6 +86,13 @@
   </div>
 
   <div class="card-body">
+    {% if not can_view_records %}
+    {# Student Viewer: high-level summaries only (docs/architecture.md §6) #}
+    <p style="color: var(--text-muted);">
+      Individual allocations are hidden for this role. The indicators above and the project capacity summary below
+      cover the whole cohort.
+    </p>
+    {% else %}
     <div class="table-responsive">
       <table class="data-table">
         <thead>
@@ -163,6 +175,7 @@
         </tbody>
       </table>
     </div>
+    {% endif %}
   </div>
 </div>
 

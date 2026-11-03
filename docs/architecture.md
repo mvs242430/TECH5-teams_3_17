@@ -209,16 +209,24 @@ The application models three explicit business roles in `app/visualization/auth.
 
 ### 6.1 Role × Action Table
 
+*Added by the students (issue A2.4). It records how the code follows §6
+above; §6 is the teacher's specification and is not changed.*
+
 Every route that changes data checks the current role with one helper from
-`app/visualization/auth.py` before it touches the database. A refused request
-flashes "Permission denied for current role." and changes nothing. Templates
-get the same helpers as `can_edit`, `can_optimize` and `can_manage_locks`
-(from `inject_template_globals` in `routes.py`), so a role only sees the
-buttons it can use.
+`app/visualization/auth.py` before it touches the database. Pages that show
+individual student data, and the form pages, check the role the same way
+before they render. A refused request flashes "Permission denied for current
+role." and changes nothing. Templates get the same helpers as flags
+(`can_edit`, `can_optimize`, `can_manage_locks`, `can_view_records` and
+`can_switch_roles`, from `inject_template_globals` in `routes.py`), so a role
+only sees the links and buttons it can use.
 
 | Action | Route(s) | Helper checked | Admin | Coordinator | Student Viewer |
 | :--- | :--- | :--- | :---: | :---: | :---: |
-| View dashboard, cohort, preferences, fixed locks, scenarios, runs, solutions, comparisons, recommendations | all `GET` routes | none (read only) | Yes | Yes | Yes |
+| View the dashboard, projects, skills, scenarios, runs and recommendations | `GET /`, `/projects`, `/skills`, `/scenarios`, `/runs/<id>`, `/recommendations/<id>` | none (read only) | Yes | Yes | Yes, summaries only |
+| View solutions and comparisons | `GET /solutions/<id>`, `/compare` | none for the page; rows per student use `can_view_student_records()` | Yes | Yes | Yes, summaries only |
+| View students, preferences and fixed locks | `GET /students`, `/preferences`, `/fixed-assignments` | `can_view_student_records()` | Yes | Yes | No |
+| Open the student and project forms | `GET /students/new`, `/students/<id>/edit`, `/projects/new`, `/projects/<id>/edit` | `can_edit_cohort_data()` | Yes | No | No |
 | Create, edit or delete students | `POST /students/new`, `/students/<id>/edit`, `/students/<id>/delete` | `can_edit_cohort_data()` | Yes | No | No |
 | Create, edit or delete projects | `POST /projects/new`, `/projects/<id>/edit`, `/projects/<id>/delete` | `can_edit_cohort_data()` | Yes | No | No |
 | Create or delete skills | `POST /skills/new`, `/skills/<id>/delete` | `can_edit_cohort_data()` | Yes | No | No |
@@ -228,18 +236,42 @@ buttons it can use.
 | Trigger an optimisation run | `POST /runs/trigger` | `can_trigger_optimization()` | Yes | Yes | No |
 | Lock a student from a solution and re-run | `POST /solutions/<id>/lock-and-rerun` | `can_manage_fixed_assignments()` and `can_trigger_optimization()` | Yes | Yes | No |
 | Clear all runs and solutions | `POST /clear-solutions` | `can_trigger_optimization()` | Yes | Yes | No |
-| Switch the active role | `POST /set-role` | none (changes the session only) | Yes | Yes | Yes |
+| Switch to any role | `POST /set-role` | `can_switch_to_role()` | Yes | No | No |
+| Return to Administrator | `POST /set-role` with `role=ADMIN` | `can_switch_to_role()` | Yes | Yes | Yes |
 
 Notes:
+- **Coordinator and cohort data.** §6 says the Coordinator is "Read-only on
+  baseline student data" and lists only locks, runs and inspection. The
+  teacher's starter code also lets only the Admin edit cohort data. So the
+  Coordinator cannot edit students, preferences, projects or skills.
+  `docs/team_reflection_and_rubric.md` §1.1 says the forms let "coordinators
+  and administrators" edit this data; we read that as naming both roles as
+  the forms' users overall, because §6 gives the rights of each role. The
+  team chose this reading on 2026-11-03.
+- **Student Viewer, summaries only.** §6 allows "anonymized dashboard
+  metrics, project descriptions, and high-level allocation summaries". The
+  Student Viewer therefore cannot open the students, preferences or fixed
+  locks pages, and their links are hidden. On solution and compare pages the
+  rows per student are hidden, and the Fixed Assignment scenario text does
+  not name the locked student. On run and solution pages, diagnostics and
+  notices are hidden too, because they can name a student (for example
+  "Student 'Alice Chen' (S01) has submitted no ranked preferences").
+  Indicators, project capacity, rank distribution, recommendations and
+  counts stay visible.
+- **Role switching.** §6 gives "switch active roles" to the Admin, so only
+  the Admin sees the role list. The prototype has no login, so the other
+  roles see a "Return to Administrator" button instead; it stands in for
+  signing in again, and without it a Student Viewer could never leave the
+  role. This is not security: anyone at the keyboard can go back to Admin.
+  A real deployment would take the role from sign-in.
 - Fixed locks have their own helper, `can_manage_fixed_assignments()`, even
   though it allows the same roles as `can_trigger_optimization()` today.
   Running the solver and changing its inputs are separate rules, so changing
   one does not silently change the other.
-- The role switcher in the top bar stands in for a login in this prototype:
-  any role can switch to any other. The checks above stop accidental changes
-  by a Student Viewer; a real deployment would take the role from sign-in.
 - The test `test_student_viewer_cannot_mutate` in
-  `tests/test_visualization_component.py` posts to every route in this table
-  as a Student Viewer and checks that no table in the database changed.
+  `tests/test_visualization_component.py` posts to every `POST` route in this
+  table as a Student Viewer and checks that no table in the database changed.
   `test_mutating_route_list_covers_every_post_route` fails if a new `POST`
-  route is added without being added to that test.
+  route is added without being added to that test. The tests under "Teacher's
+  role rules" in the same file cover the read pages, form pages and role
+  switching.

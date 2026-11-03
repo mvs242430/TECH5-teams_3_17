@@ -45,20 +45,50 @@ def inject_template_globals() -> dict[str, Any]:
         "can_edit": auth.can_edit_cohort_data(),
         "can_optimize": auth.can_trigger_optimization(),
         "can_manage_locks": auth.can_manage_fixed_assignments(),
+        "can_view_records": auth.can_view_student_records(),
+        "can_switch_roles": auth.can_switch_roles(),
     }
 
 
 @web_bp.post("/set-role")
 def set_role() -> flask.Response:
-    """Updates the active user role prototype."""
+    """Updates the active user role prototype.
+
+    Only the Administrator may pick any role; the other roles may only
+    return to Administrator (see `auth.can_switch_to_role`).
+    """
     role = flask.request.form.get("role", auth.UserRole.ADMIN)
-    auth.set_current_role(role)
-    role_name = auth.UserRole.ALL_ROLES.get(role, role)
-    flask.flash(f"Switched role to {role_name}.", "info")
     target = flask.request.referrer or flask.url_for(
         "visualization_web.dashboard"
     )
+    if not auth.can_switch_to_role(role):
+        flask.flash("Permission denied for current role.", "danger")
+        return flask.redirect(target)
+
+    auth.set_current_role(role)
+    role_name = auth.UserRole.ALL_ROLES.get(role, role)
+    flask.flash(f"Switched role to {role_name}.", "info")
     return flask.redirect(target)
+
+
+def _records_page_or_dashboard(endpoint: str) -> str:
+    """Returns where to send a request that was refused.
+
+    Pages that list student records refuse roles without
+    `auth.can_view_student_records()`. Sending such a role there after a
+    refusal would only refuse it a second time, so it goes to the
+    dashboard instead.
+
+    Args:
+        endpoint: Endpoint of a student-record page, for example
+            "visualization_web.list_students".
+
+    Returns:
+        The URL of that page, or of the dashboard.
+    """
+    if auth.can_view_student_records():
+        return flask.url_for(endpoint)
+    return flask.url_for("visualization_web.dashboard")
 
 
 @web_bp.get("/")
@@ -94,8 +124,13 @@ def dashboard() -> str:
 
 
 @web_bp.get("/students")
-def list_students() -> str:
+def list_students() -> Any:
     """Lists all students with their proficiencies and ranked preferences."""
+    # Names, skills and rankings are individual student data.
+    if not auth.can_view_student_records():
+        flask.flash("Permission denied for current role.", "danger")
+        return flask.redirect(flask.url_for("visualization_web.dashboard"))
+
     students = repositories.StudentRepository().list_all()
     projects = repositories.ProjectRepository().list_all()
     skills = repositories.SkillRepository().list_all()
@@ -108,8 +143,15 @@ def list_students() -> str:
 
 
 @web_bp.get("/students/new")
-def new_student_form() -> str:
+def new_student_form() -> Any:
     """Displays form to create a new student."""
+    # A role that cannot save the form does not get to open it.
+    if not auth.can_edit_cohort_data():
+        flask.flash("Permission denied for current role.", "danger")
+        return flask.redirect(
+            _records_page_or_dashboard("visualization_web.list_students")
+        )
+
     projects = repositories.ProjectRepository().list_all()
     skills = repositories.SkillRepository().list_all()
     return flask.render_template(
@@ -333,7 +375,9 @@ def create_student() -> flask.Response:
     """Processes creation of a new student."""
     if not auth.can_edit_cohort_data():
         flask.flash("Permission denied for current role.", "danger")
-        return flask.redirect(flask.url_for("visualization_web.list_students"))
+        return flask.redirect(
+            _records_page_or_dashboard("visualization_web.list_students")
+        )
 
     s_id = flask.request.form.get("id", "").strip()
     name = flask.request.form.get("display_name", "").strip() or s_id
@@ -399,6 +443,12 @@ def create_student() -> flask.Response:
 @web_bp.get("/students/<student_id>/edit")
 def edit_student_form(student_id: str) -> Any:
     """Displays form to edit an existing student."""
+    if not auth.can_edit_cohort_data():
+        flask.flash("Permission denied for current role.", "danger")
+        return flask.redirect(
+            _records_page_or_dashboard("visualization_web.list_students")
+        )
+
     student = repositories.StudentRepository().get_by_id(student_id)
     if not student:
         flask.flash(f"Student '{student_id}' not found.", "danger")
@@ -419,7 +469,9 @@ def update_student(student_id: str) -> flask.Response:
     """Updates an existing student entity."""
     if not auth.can_edit_cohort_data():
         flask.flash("Permission denied for current role.", "danger")
-        return flask.redirect(flask.url_for("visualization_web.list_students"))
+        return flask.redirect(
+            _records_page_or_dashboard("visualization_web.list_students")
+        )
 
     name = (
         flask.request.form.get("display_name", "").strip() or student_id
@@ -471,7 +523,9 @@ def delete_student(student_id: str) -> flask.Response:
     """Deletes a student."""
     if not auth.can_edit_cohort_data():
         flask.flash("Permission denied for current role.", "danger")
-        return flask.redirect(flask.url_for("visualization_web.list_students"))
+        return flask.redirect(
+            _records_page_or_dashboard("visualization_web.list_students")
+        )
 
     repositories.StudentRepository().delete(student_id)
     flask.flash(f"Student '{student_id}' removed.", "info")
@@ -494,8 +548,13 @@ def list_projects() -> str:
 
 
 @web_bp.get("/projects/new")
-def new_project_form() -> str:
+def new_project_form() -> Any:
     """Displays form to create a semester project."""
+    # A role that cannot save the form does not get to open it.
+    if not auth.can_edit_cohort_data():
+        flask.flash("Permission denied for current role.", "danger")
+        return flask.redirect(flask.url_for("visualization_web.list_projects"))
+
     skills = repositories.SkillRepository().list_all()
     return flask.render_template(
         "project_form.html", project=None, skills=skills
@@ -784,6 +843,10 @@ def create_project() -> flask.Response:
 @web_bp.get("/projects/<project_id>/edit")
 def edit_project_form(project_id: str) -> Any:
     """Displays form to edit a project."""
+    if not auth.can_edit_cohort_data():
+        flask.flash("Permission denied for current role.", "danger")
+        return flask.redirect(flask.url_for("visualization_web.list_projects"))
+
     project = repositories.ProjectRepository().get_by_id(project_id)
     if not project:
         flask.flash(f"Project '{project_id}' not found.", "danger")
@@ -1052,8 +1115,13 @@ def delete_skill(skill_id: str) -> flask.Response:
 
 
 @web_bp.get("/preferences")
-def preferences_overview() -> str:
+def preferences_overview() -> Any:
     """Displays cross-table preference matrix."""
+    # Each row is one named student's ranking.
+    if not auth.can_view_student_records():
+        flask.flash("Permission denied for current role.", "danger")
+        return flask.redirect(flask.url_for("visualization_web.dashboard"))
+
     students = repositories.StudentRepository().list_all()
     projects = repositories.ProjectRepository().list_all()
     return flask.render_template(
@@ -1067,8 +1135,13 @@ def preferences_overview() -> str:
 
 
 @web_bp.get("/fixed-assignments")
-def list_fixed_assignments() -> str:
+def list_fixed_assignments() -> Any:
     """Lists administrative pre-allocated constraints."""
+    # Each lock names a student, a project and the reason for the lock.
+    if not auth.can_view_student_records():
+        flask.flash("Permission denied for current role.", "danger")
+        return flask.redirect(flask.url_for("visualization_web.dashboard"))
+
     fixed = repositories.FixedAssignmentRepository().list_all()
     students = repositories.StudentRepository().list_all()
     projects = repositories.ProjectRepository().list_all()
@@ -1087,7 +1160,11 @@ def create_fixed_assignment() -> flask.Response:
     # Locks are solver inputs, so Admin and Coordinator manage them.
     if not auth.can_manage_fixed_assignments():
         flask.flash("Permission denied for current role.", "danger")
-        return flask.redirect(target)
+        return flask.redirect(
+            _records_page_or_dashboard(
+                "visualization_web.list_fixed_assignments"
+            )
+        )
 
     s_id = flask.request.form.get("student_id", "").strip()
     p_id = flask.request.form.get("project_id", "").strip()
@@ -1117,7 +1194,11 @@ def delete_fixed_assignment(student_id: str) -> flask.Response:
     target = flask.url_for("visualization_web.list_fixed_assignments")
     if not auth.can_manage_fixed_assignments():
         flask.flash("Permission denied for current role.", "danger")
-        return flask.redirect(target)
+        return flask.redirect(
+            _records_page_or_dashboard(
+                "visualization_web.list_fixed_assignments"
+            )
+        )
 
     repositories.FixedAssignmentRepository().delete(student_id)
     flask.flash(f"Fixed assignment for student '{student_id}' removed.", "info")

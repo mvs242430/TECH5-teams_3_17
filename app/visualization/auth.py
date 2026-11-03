@@ -61,6 +61,48 @@ def can_trigger_optimization() -> bool:
     return get_current_role() in (UserRole.ADMIN, UserRole.COORDINATOR)
 
 
+def can_view_student_records() -> bool:
+    """Checks whether the current user may see individual student data.
+
+    Student data means names, IDs, skills, preference rankings, fixed
+    locks and each student's allocation. The Student Viewer sees only
+    anonymized metrics, project descriptions and high-level allocation
+    summaries (docs/architecture.md, section 6).
+
+    Returns:
+        True if the current role may see individual student records.
+    """
+    return get_current_role() in (UserRole.ADMIN, UserRole.COORDINATOR)
+
+
+def can_switch_roles() -> bool:
+    """Checks whether the current user may switch to any role.
+
+    Only the Administrator switches active roles (docs/architecture.md,
+    section 6), for example to check what a Student Viewer sees.
+
+    Returns:
+        True if the current role may choose any active role.
+    """
+    return get_current_role() == UserRole.ADMIN
+
+
+def can_switch_to_role(role: str) -> bool:
+    """Checks whether the current user may make `role` the active role.
+
+    The prototype has no login, so every role may go back to
+    Administrator. That step stands in for signing in again; without it a
+    Student Viewer could never leave the role.
+
+    Args:
+        role: The role the user asks to switch to.
+
+    Returns:
+        True if the switch is allowed.
+    """
+    return can_switch_roles() or role == UserRole.ADMIN
+
+
 def can_manage_fixed_assignments() -> bool:
     """Checks whether the current user may create or release fixed locks.
 
