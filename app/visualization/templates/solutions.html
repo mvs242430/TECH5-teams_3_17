@@ -57,7 +57,7 @@
                               sol1=selected_run.solutions[0].id,
                               sol2=selected_run.solutions[1].id) }}"
              class="btn btn-sm btn-secondary">
-            Compare Alternatives &rarr;
+            Compare Alt #{{ selected_run.solutions[0].alternative_number }} vs Alt #{{ selected_run.solutions[1].alternative_number }} &rarr;
           </a>
         {% endif %}
 
@@ -73,8 +73,8 @@
       {% if is_stale_run %}
         <div class="alert alert-warning" style="margin-bottom: 1.25rem;">
           <span>
-            <strong>Historical Run Notice:</strong> Cohort student records were replaced after this run, so individual student allocations are no longer active.
-            {% if can_optimize %}Launch a new optimization run on the Dashboard to generate fresh allocations.{% endif %}
+            <strong>Historical Run Notice:</strong> Individual student allocations for this historical run were cleared when cohort data was reloaded.
+            {% if can_optimize %}Launch a new optimization run on the Dashboard to inspect and compare active allocations.{% endif %}
           </span>
         </div>
       {% endif %}

@@ -2455,3 +2455,138 @@ def test_solutions_page_student_privacy_and_role_controls(
         assert not [i for i in _student_identifiers() if i in page]
         assert "Detailed diagnostics are hidden for this role" in page
 
+
+# -----------------------------------------------------------------------------
+# Issue A2.1.2 - Compare preselection & emptied past-run UX
+# -----------------------------------------------------------------------------
+
+
+def _selected_option_value(page: str, select_name: str) -> str | None:
+    """Extracts the selected option value for a named <select> element."""
+    marker = f'name="{select_name}"'
+    if marker not in page:
+        return None
+    select_block = page.split(marker, maxsplit=1)[1].split(
+        "</select>", maxsplit=1
+    )[0]
+    for chunk in select_block.split("<option")[1:]:
+        header = chunk.split(">", maxsplit=1)[0]
+        if "selected" in header and 'value="' in header:
+            return header.split('value="', maxsplit=1)[1].split(
+                '"', maxsplit=1
+            )[0]
+    return None
+
+
+def test_compare_without_params_preselects_and_compares_latest_run(
+    real_engine_client,
+) -> None:
+    """Opening /compare from the navbar preselects Alt #1 vs Alt #2 and compares."""
+    run = _load_and_run(real_engine_client)
+    alt_1, alt_2 = run.solutions[0], run.solutions[1]
+
+    res = real_engine_client.get("/compare")
+
+    assert res.status_code == 200
+    page = res.get_data(as_text=True)
+    assert _selected_option_value(page, "sol1") == alt_1.id
+    assert _selected_option_value(page, "sol2") == alt_2.id
+    assert "Changed Student Allocations" in page
+    assert "Plain-Language Impact Summary" in page
+
+
+def test_compare_with_single_sol1_preselects_anchor_and_companion(
+    real_engine_client,
+) -> None:
+    """A single ?sol1=<id> link preselects that solution and a sibling option."""
+    run = _load_and_run(real_engine_client)
+    alt_1, alt_3 = run.solutions[0], run.solutions[2]
+
+    res = real_engine_client.get(f"/compare?sol1={alt_3.id}")
+
+    assert res.status_code == 200
+    page = res.get_data(as_text=True)
+    assert _selected_option_value(page, "sol1") == alt_3.id
+    assert _selected_option_value(page, "sol2") == alt_1.id
+    assert "Changed Student Allocations" in page
+
+
+def test_compare_single_unknown_or_emptied_id_redirects_with_message(
+    real_engine_client,
+) -> None:
+    """A single unknown or emptied ?sol1=<id> flashes danger and redirects."""
+    bad = real_engine_client.get("/compare?sol1=missing-id")
+    assert bad.status_code == 302
+    bad_page = real_engine_client.get(
+        "/compare?sol1=missing-id", follow_redirects=True
+    )
+    assert b"not found" in bad_page.data
+
+    old = _load_and_run(real_engine_client)
+    real_engine_client.post("/load-scenario/standard", follow_redirects=True)
+
+    emptied = real_engine_client.get(f"/compare?sol1={old.solutions[0].id}")
+    assert emptied.status_code == 302
+    emptied_page = real_engine_client.get(
+        f"/compare?sol1={old.solutions[0].id}", follow_redirects=True
+    )
+    assert b"no longer has any assignments" in emptied_page.data
+
+
+def test_compare_empty_state_explains_cleared_past_runs_and_empty_db(
+    real_engine_client,
+) -> None:
+    """Empty /compare explains missing or cleared runs instead of blank selects."""
+    fresh = real_engine_client.get("/compare").get_data(as_text=True)
+    assert "No optimization solutions available yet" in fresh
+    assert 'name="sol1"' not in fresh
+
+    old = _load_and_run(real_engine_client)
+    real_engine_client.post("/load-scenario/standard", follow_redirects=True)
+
+    cleared_compare = real_engine_client.get("/compare").get_data(as_text=True)
+    assert "No active solution allocations available to compare" in (
+        cleared_compare
+    )
+    assert "student allocations were cleared" in cleared_compare
+    assert 'name="sol1"' not in cleared_compare
+
+    dashboard = real_engine_client.get("/").get_data(as_text=True)
+    assert "Allocations cleared (cohort reloaded)" in dashboard
+
+    run_page = real_engine_client.get(f"/runs/{old.id}").get_data(as_text=True)
+    assert "cleared when cohort data was reloaded" in run_page
+    assert "Compare Alt #1 vs Alt #2" not in run_page
+
+
+def test_run_detail_shows_direct_compare_link_for_active_run(
+    real_engine_client,
+) -> None:
+    """Active multi-solution run pages link directly to Alt #1 vs Alt #2."""
+    run = _load_and_run(real_engine_client)
+
+    page = real_engine_client.get(f"/runs/{run.id}").get_data(as_text=True)
+
+    assert "Compare Alt #1 vs Alt #2" in page
+    assert run.solutions[0].id in page
+    assert run.solutions[1].id in page
+
+
+def test_compare_single_alternative_run_preselects_without_crashing(
+    real_engine_client,
+) -> None:
+    """When only 1 alternative exists, /compare preselects it without error."""
+    real_engine_client.post("/load-scenario/standard", follow_redirects=True)
+    real_engine_client.post(
+        "/runs/trigger",
+        data={"primary_strategy": "PREFERENCE", "max_alternatives": 1},
+        follow_redirects=True,
+    )
+    only_sol = repositories.RunRepository().list_runs()[0].solutions[0]
+
+    res = real_engine_client.get("/compare")
+
+    assert res.status_code == 200
+    page = res.get_data(as_text=True)
+    assert _selected_option_value(page, "sol1") == only_sol.id
+    assert "Only one active solution alternative is available" in page

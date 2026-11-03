@@ -147,7 +147,14 @@
               <span class="badge badge-secondary">{{ r.status }}</span>
               {% endif %}
             </td>
-            <td><strong>{{ r.solutions|length }}</strong> solution(s)</td>
+            <td>
+              <strong>{{ r.solutions|length }}</strong> solution(s)
+              {% if emptied_run_ids and r.id in emptied_run_ids %}
+                <div style="font-size: 0.78rem; color: var(--text-muted);">
+                  Allocations cleared (cohort reloaded)
+                </div>
+              {% endif %}
+            </td>
             <td>{{ r.configuration.get('primary_strategy', 'PREFERENCE') }}</td>
             <td>
               <a href="{{ url_for('visualization_web.view_run', run_id=r.id) }}" class="btn btn-sm btn-primary">

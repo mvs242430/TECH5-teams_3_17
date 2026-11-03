@@ -14,6 +14,28 @@
   </div>
 
   <div class="card-body">
+    {% if not all_solutions %}
+      <div class="alert alert-warning" style="align-items: flex-start; flex-direction: column; gap: 0.75rem;">
+        {% if has_emptied_runs %}
+          <div>
+            <strong>No active solution allocations available to compare.</strong>
+            <p style="font-size: 0.9rem; margin-top: 0.25rem;">
+              Past optimization runs exist in history, but their student allocations were cleared when cohort or benchmark scenario data was reloaded. Launch a new optimization run on the Dashboard to compare alternatives.
+            </p>
+          </div>
+        {% else %}
+          <div>
+            <strong>No optimization solutions available yet.</strong>
+            <p style="font-size: 0.9rem; margin-top: 0.25rem;">
+              Launch an optimization run on the Dashboard with at least two alternatives to compare trade-offs side by side.
+            </p>
+          </div>
+        {% endif %}
+        <a href="{{ url_for('visualization_web.dashboard') }}" class="btn btn-sm btn-primary">
+          Go to Dashboard &rarr;
+        </a>
+      </div>
+    {% else %}
     <!-- Solution Selector Form -->
     <form action="{{ url_for('visualization_web.compare_solutions') }}" method="GET" style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap; margin-bottom: 1.5rem; background: #f8fafc; border: 1px solid var(--border-color); padding: 1rem; border-radius: var(--radius-md);">
       <div style="flex: 1; min-width: 250px;">
@@ -205,12 +227,17 @@
       </div>
     {% elif not comparison and sol_a and sol_b %}
       <p style="color: var(--text-muted); text-align: center; padding: 2rem;">
-        Comparison data not available for the selected solutions.
+        {% if all_solutions|length == 1 %}
+          Only one active solution alternative is available. Launch an optimization run with at least two alternatives (or run again on the same cohort) to compare trade-offs.
+        {% else %}
+          Select two solutions from the same student cohort above to view comparative trade-offs.
+        {% endif %}
       </p>
     {% else %}
       <p style="color: var(--text-muted); text-align: center; padding: 2rem;">
         Select two solutions above to view comparative trade-offs.
       </p>
+    {% endif %}
     {% endif %}
   </div>
 </div>

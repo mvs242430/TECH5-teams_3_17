@@ -104,9 +104,15 @@ def dashboard() -> str:
     projects = proj_repo.list_all()
     fixed_assignments = fixed_repo.list_all()
     runs = run_repo.list_runs(limit=10)
+    usable_ids = run_repo.list_solution_ids_with_assignments()
 
     total_capacity = sum(p.max_capacity for p in projects)
     latest_run = runs[0] if runs else None
+    emptied_run_ids = {
+        r.id
+        for r in runs
+        if r.solutions and not any(s.id in usable_ids for s in r.solutions)
+    }
 
     return flask.render_template(
         "dashboard.html",
@@ -116,6 +122,7 @@ def dashboard() -> str:
         fixed_count=len(fixed_assignments),
         recent_runs=runs,
         latest_run=latest_run,
+        emptied_run_ids=emptied_run_ids,
     )
 
 
@@ -1699,101 +1706,12 @@ def _unproven_alternatives(solutions: list[models.Solution]) -> list[int]:
     ]
 
 
-@web_bp.get("/compare")
-def compare_solutions() -> Any:
-    """Renders side-by-side comparative analysis of two solutions.
+def _enrich_comparison_names(comparison: models.RunComparison) -> None:
+    """Enriches changed assignment records with display names and titles.
 
-    Reads ``sol1`` and ``sol2`` query parameters. With no IDs the page shows
-    only the selector dropdowns.  With an unrecognised ID a ``danger`` flash
-    message is issued and the user is redirected back to the empty selector.
-    With two valid IDs the comparison is fetched from
-    ``AssignmentEngine.compare_solutions``; if that raises
-    ``NotImplementedError`` the ``MockAssignmentEngine`` is used instead
-    (mirroring the fallback pattern in ``trigger_run``).  Solutions that have
-    lost their assignments, or that cover different students, give a
-    ``danger`` flash message and a redirect instead of an error page.
-
-    Returns:
-        Rendered ``compare.html`` with ``sol_a``, ``sol_b``, ``comparison``,
-        and ``all_solutions`` context variables.
+    Args:
+        comparison: Comparison DTO returned by the assignment engine.
     """
-    # Build the flat list of solutions across recent runs for the dropdowns.
-    # Loading a scenario deletes the students, which empties older solutions,
-    # so only solutions that still have assignments are offered.
-    run_repo = repositories.RunRepository()
-    recent_runs = run_repo.list_runs(limit=50)
-    usable_ids = run_repo.list_solution_ids_with_assignments()
-    all_solutions: list[models.Solution] = [
-        sol
-        for run in recent_runs
-        for sol in run.solutions
-        if sol.id in usable_ids
-    ]
-
-    # Read the two requested solution IDs from the query string.
-    sol1_id = flask.request.args.get("sol1", "").strip()
-    sol2_id = flask.request.args.get("sol2", "").strip()
-
-    # No IDs supplied — render the selector only (no comparison panel).
-    if not sol1_id or not sol2_id:
-        return flask.render_template(
-            "compare.html",
-            sol_a=None,
-            sol_b=None,
-            comparison=None,
-            all_solutions=all_solutions,
-        )
-
-    # Resolve solution objects; redirect on unknown ID.
-    sol_a = run_repo.get_solution(sol1_id)
-    if not sol_a:
-        flask.flash(
-            f"Solution '{sol1_id}' not found. Please select a valid solution.",
-            "danger",
-        )
-        return flask.redirect(flask.url_for("visualization_web.compare_solutions"))
-
-    sol_b = run_repo.get_solution(sol2_id)
-    if not sol_b:
-        flask.flash(
-            f"Solution '{sol2_id}' not found. Please select a valid solution.",
-            "danger",
-        )
-        return flask.redirect(flask.url_for("visualization_web.compare_solutions"))
-
-    # An emptied solution has nothing to compare, and two empty solutions
-    # would still pass the engine's same-students check, so stop here.
-    if not sol_a.assignments or not sol_b.assignments:
-        flask.flash(
-            "One of these solutions no longer has any assignments because "
-            "its students were removed. Please select a newer solution.",
-            "danger",
-        )
-        return flask.redirect(flask.url_for("visualization_web.compare_solutions"))
-
-    # Delegate comparison to the engine; fall back to the mock on
-    # NotImplementedError (same pattern as trigger_run / lock_and_rerun).
-    engine: contract.AssignmentEngineContract = solvers.AssignmentEngine()
-    try:
-        comparison = engine.compare_solutions(sol1_id, sol2_id)
-    except NotImplementedError:
-        flask.flash(
-            "Notice: AssignmentEngine.compare_solutions() is not yet implemented "
-            "by Team B. Running with MockAssignmentEngine for demonstration.",
-            "info",
-        )
-        comparison = mocks.MockAssignmentEngine().compare_solutions(
-            sol1_id, sol2_id
-        )
-    except ValueError:
-        # The engine only compares solutions with the same students.
-        flask.flash(
-            "These solutions cover different students, so they cannot be "
-            "compared. Please select two solutions from the same cohort.",
-            "danger",
-        )
-        return flask.redirect(flask.url_for("visualization_web.compare_solutions"))
-
     # Enrich changed_assignments with human-readable student names (only for
     # roles authorized to view student records) and project titles.
     student_map = (
@@ -1817,12 +1735,323 @@ def compare_solutions() -> Any:
         if p_b_id in project_map:
             item["project_b_title"] = project_map[p_b_id]
 
+
+def _execute_engine_comparison(
+    sol1_id: str,
+    sol2_id: str,
+) -> models.RunComparison:
+    """Computes a solution comparison via the engine contract and enriches it.
+
+    Args:
+        sol1_id: Identifier of baseline solution A.
+        sol2_id: Identifier of comparison solution B.
+
+    Returns:
+        Enriched RunComparison DTO.
+
+    Raises:
+        ValueError: If the two solutions cover different student cohorts.
+    """
+    engine: contract.AssignmentEngineContract = solvers.AssignmentEngine()
+    try:
+        comparison = engine.compare_solutions(sol1_id, sol2_id)
+    except NotImplementedError:
+        flask.flash(
+            "Notice: AssignmentEngine.compare_solutions() is not yet "
+            "implemented by Team B. Running with MockAssignmentEngine for "
+            "demonstration.",
+            "info",
+        )
+        comparison = mocks.MockAssignmentEngine().compare_solutions(
+            sol1_id, sol2_id
+        )
+    _enrich_comparison_names(comparison)
+    return comparison
+
+
+def _companion_candidates(
+    anchor: models.Solution,
+    all_solutions: list[models.Solution],
+) -> list[models.Solution]:
+    """Orders distinct usable solutions, preferring alternatives from the same run.
+
+    Args:
+        anchor: The already-selected solution.
+        all_solutions: Usable solutions across recent runs.
+
+    Returns:
+        Distinct usable solutions ordered with same-run alternatives first.
+    """
+    same_run = [
+        s
+        for s in all_solutions
+        if s.run_id == anchor.run_id and s.id != anchor.id
+    ]
+    other_runs = [
+        s
+        for s in all_solutions
+        if s.run_id != anchor.run_id and s.id != anchor.id
+    ]
+    return same_run + other_runs
+
+
+def _auto_select_and_compare(
+    recent_runs: list[models.AssignmentRun],
+    usable_ids: set[str],
+    all_solutions: list[models.Solution],
+    run_repo: repositories.RunRepository,
+    compute_comparison: bool = True,
+) -> tuple[
+    models.Solution | None,
+    models.Solution | None,
+    models.RunComparison | None,
+]:
+    """Preselects two usable solutions and compares them when appropriate.
+
+    Prefers ``Alt #1`` and ``Alt #2`` from the newest run with at least two
+    usable solutions. When ``compute_comparison`` is False (for example after
+    an error redirect), preselects the dropdown options without rendering a
+    comparison table underneath the error banner.
+
+    Args:
+        recent_runs: Recent runs ordered newest first.
+        usable_ids: IDs of solutions that still have assignments.
+        all_solutions: Flat list of usable solutions across recent runs.
+        run_repo: Repository used to load selected solution records.
+        compute_comparison: Whether to also run the engine comparison now.
+
+    Returns:
+        A tuple of ``(sol_a, sol_b, comparison)``.
+    """
+    if not all_solutions:
+        return None, None, None
+
+    for run in recent_runs:
+        usable_in_run = [s for s in run.solutions if s.id in usable_ids]
+        if len(usable_in_run) >= 2:
+            sol_a = run_repo.get_solution(usable_in_run[0].id)
+            sol_b = run_repo.get_solution(usable_in_run[1].id)
+            if sol_a is not None and sol_b is not None:
+                if not compute_comparison:
+                    return sol_a, sol_b, None
+                try:
+                    comp = _execute_engine_comparison(sol_a.id, sol_b.id)
+                    return sol_a, sol_b, comp
+                except ValueError:
+                    return sol_a, sol_b, None
+
+    sol_a = run_repo.get_solution(all_solutions[0].id)
+    if sol_a is None:
+        return None, None, None
+
+    if compute_comparison:
+        for cand in all_solutions[1:]:
+            sol_b = run_repo.get_solution(cand.id)
+            if sol_b is None:
+                continue
+            try:
+                comp = _execute_engine_comparison(sol_a.id, sol_b.id)
+                return sol_a, sol_b, comp
+            except ValueError:
+                continue
+
+    fallback_b = (
+        run_repo.get_solution(all_solutions[1].id)
+        if len(all_solutions) >= 2
+        else sol_a
+    )
+    return sol_a, fallback_b, None
+
+
+def _compare_with_companion(
+    anchor: models.Solution,
+    anchor_is_a: bool,
+    all_solutions: list[models.Solution],
+    run_repo: repositories.RunRepository,
+) -> tuple[
+    models.Solution,
+    models.Solution,
+    models.RunComparison | None,
+]:
+    """Pairs a single requested solution with a compatible companion solution.
+
+    Args:
+        anchor: Validated solution requested by the user.
+        anchor_is_a: True when ``anchor`` belongs in slot A (``sol1``).
+        all_solutions: Flat list of usable solutions across recent runs.
+        run_repo: Repository used to load candidate companion solutions.
+
+    Returns:
+        A tuple of ``(sol_a, sol_b, comparison)``.
+    """
+    candidates = _companion_candidates(anchor, all_solutions)
+    for cand in candidates:
+        partner = run_repo.get_solution(cand.id)
+        if partner is None or not partner.assignments:
+            continue
+        sol_a = anchor if anchor_is_a else partner
+        sol_b = partner if anchor_is_a else anchor
+        try:
+            comp = _execute_engine_comparison(sol_a.id, sol_b.id)
+            return sol_a, sol_b, comp
+        except ValueError:
+            continue
+
+    fallback = (
+        run_repo.get_solution(candidates[0].id) if candidates else None
+    ) or anchor
+    if anchor_is_a:
+        return anchor, fallback, None
+    return fallback, anchor, None
+
+
+@web_bp.get("/compare")
+def compare_solutions() -> Any:
+    """Renders side-by-side comparative analysis of two solutions.
+
+    Reads ``sol1`` and ``sol2`` query parameters. When neither ID is supplied,
+    automatically preselects and compares two distinct alternatives from the
+    most recent active run if available. When only one ID is supplied (for
+    example from a solution detail page), validates it and pairs it with a
+    compatible companion solution. Unknown IDs, emptied solutions, or pairs
+    covering different student cohorts issue a ``danger`` flash message and
+    redirect back to ``/compare``.
+
+    Returns:
+        Rendered ``compare.html`` template or redirect response.
+    """
+    # Build the flat list of solutions across recent runs for the dropdowns.
+    # Loading a scenario deletes the students, which empties older solutions,
+    # so only solutions that still have assignments are offered.
+    run_repo = repositories.RunRepository()
+    recent_runs = run_repo.list_runs(limit=50)
+    usable_ids = run_repo.list_solution_ids_with_assignments()
+    all_solutions: list[models.Solution] = [
+        sol
+        for run in recent_runs
+        for sol in run.solutions
+        if sol.id in usable_ids
+    ]
+    has_emptied_runs = bool(recent_runs) and not all_solutions
+
+    # Read the two requested solution IDs from the query string.
+    sol1_id = flask.request.args.get("sol1", "").strip()
+    sol2_id = flask.request.args.get("sol2", "").strip()
+
+    # Case 1: No IDs supplied — preselect latest active pair, and auto-compare
+    # unless we arrived here from a failed comparison redirect (danger flash),
+    # in which case showing another pair's numbers beneath the error misleads.
+    if not sol1_id and not sol2_id:
+        has_error_flash = any(
+            category == "danger"
+            for category, _ in flask.session.get("_flashes", ())
+        )
+        sol_a, sol_b, comparison = _auto_select_and_compare(
+            recent_runs,
+            usable_ids,
+            all_solutions,
+            run_repo,
+            compute_comparison=not has_error_flash,
+        )
+        return flask.render_template(
+            "compare.html",
+            sol_a=sol_a,
+            sol_b=sol_b,
+            comparison=comparison,
+            all_solutions=all_solutions,
+            has_emptied_runs=has_emptied_runs,
+        )
+
+    # Case 2: Only one ID supplied (e.g. from solution_detail.html).
+    if not sol1_id or not sol2_id:
+        single_id = sol1_id or sol2_id
+        anchor = run_repo.get_solution(single_id)
+        if not anchor:
+            flask.flash(
+                f"Solution '{single_id}' not found. Please select a valid "
+                "solution.",
+                "danger",
+            )
+            return flask.redirect(
+                flask.url_for("visualization_web.compare_solutions")
+            )
+        if not anchor.assignments:
+            flask.flash(
+                "One of these solutions no longer has any assignments because "
+                "its students were removed. Please select a newer solution.",
+                "danger",
+            )
+            return flask.redirect(
+                flask.url_for("visualization_web.compare_solutions")
+            )
+        sol_a, sol_b, comparison = _compare_with_companion(
+            anchor=anchor,
+            anchor_is_a=bool(sol1_id),
+            all_solutions=all_solutions,
+            run_repo=run_repo,
+        )
+        return flask.render_template(
+            "compare.html",
+            sol_a=sol_a,
+            sol_b=sol_b,
+            comparison=comparison,
+            all_solutions=all_solutions,
+            has_emptied_runs=has_emptied_runs,
+        )
+
+    # Case 3: Both IDs supplied — validate both and delegate to engine.
+    sol_a = run_repo.get_solution(sol1_id)
+    if not sol_a:
+        flask.flash(
+            f"Solution '{sol1_id}' not found. Please select a valid solution.",
+            "danger",
+        )
+        return flask.redirect(
+            flask.url_for("visualization_web.compare_solutions")
+        )
+
+    sol_b = run_repo.get_solution(sol2_id)
+    if not sol_b:
+        flask.flash(
+            f"Solution '{sol2_id}' not found. Please select a valid solution.",
+            "danger",
+        )
+        return flask.redirect(
+            flask.url_for("visualization_web.compare_solutions")
+        )
+
+    # An emptied solution has nothing to compare, and two empty solutions
+    # would still pass the engine's same-students check, so stop here.
+    if not sol_a.assignments or not sol_b.assignments:
+        flask.flash(
+            "One of these solutions no longer has any assignments because "
+            "its students were removed. Please select a newer solution.",
+            "danger",
+        )
+        return flask.redirect(
+            flask.url_for("visualization_web.compare_solutions")
+        )
+
+    try:
+        comparison = _execute_engine_comparison(sol1_id, sol2_id)
+    except ValueError:
+        # The engine only compares solutions with the same students.
+        flask.flash(
+            "These solutions cover different students, so they cannot be "
+            "compared. Please select two solutions from the same cohort.",
+            "danger",
+        )
+        return flask.redirect(
+            flask.url_for("visualization_web.compare_solutions")
+        )
+
     return flask.render_template(
         "compare.html",
         sol_a=sol_a,
         sol_b=sol_b,
         comparison=comparison,
         all_solutions=all_solutions,
+        has_emptied_runs=has_emptied_runs,
     )
 
 
