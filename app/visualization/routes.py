@@ -1098,16 +1098,47 @@ def create_fixed_assignment() -> flask.Response:
         flask.flash("Student and Project must be selected.", "warning")
         return flask.redirect(target)
 
-    repositories.FixedAssignmentRepository().save(
+    # X2: an unknown ID (stale form, deleted record) used to crash with a
+    # database foreign-key error. Tell the user what to change instead.
+    known_students = {s.id for s in repositories.StudentRepository().list_all()}
+    known_projects = {p.id for p in repositories.ProjectRepository().list_all()}
+    if s_id not in known_students:
+        flask.flash(
+            f"Student '{s_id}' does not exist. Pick a student from the list "
+            "or add the student on the Students page first.",
+            "warning",
+        )
+        return flask.redirect(target)
+    if p_id not in known_projects:
+        flask.flash(
+            f"Project '{p_id}' does not exist. Pick a project from the list "
+            "or add the project on the Projects page first.",
+            "warning",
+        )
+        return flask.redirect(target)
+
+    fixed_repo = repositories.FixedAssignmentRepository()
+    previous = {f.student_id: f.project_id for f in fixed_repo.list_all()}
+    fixed_repo.save(
         models.FixedAssignment(
             student_id=s_id, project_id=p_id, status=status, reason=reason
         )
     )
-    flask.flash(
-        f"Fixed assignment created: Student {s_id} locked to Project {p_id}. "
-        "A new run is required to recalculate allocations.",
-        "success",
-    )
+    old_p_id = previous.get(s_id)
+    if old_p_id and old_p_id != p_id:
+        # X2: a student can only have one lock, so this replaces the old one.
+        flask.flash(
+            f"Fixed assignment updated: Student {s_id} was locked to Project "
+            f"{old_p_id} and is now locked to Project {p_id}. "
+            "A new run is required to recalculate allocations.",
+            "success",
+        )
+    else:
+        flask.flash(
+            f"Fixed assignment created: Student {s_id} locked to Project "
+            f"{p_id}. A new run is required to recalculate allocations.",
+            "success",
+        )
     return flask.redirect(target)
 
 

@@ -1841,3 +1841,82 @@ def test_lock_controls_shown_only_to_lock_roles(
         sees_lock_controls
     )
     assert ("/lock-and-rerun" in solution_page) is sees_lock_controls
+
+
+# -----------------------------------------------------------------------------
+# X2: bad-data walkthrough findings
+# -----------------------------------------------------------------------------
+
+
+def test_fixed_assignment_unknown_student_shows_message(seeded_client) -> None:
+    """A lock for a student that does not exist is refused, not a crash."""
+    res = seeded_client.post(
+        "/fixed-assignments/new",
+        data={"student_id": "NOPE", "project_id": "P1"},
+        follow_redirects=True,
+    )
+
+    assert res.status_code == 200
+    assert b"Student &#39;NOPE&#39; does not exist" in res.data
+    assert repositories.FixedAssignmentRepository().list_all() == []
+
+
+def test_fixed_assignment_unknown_project_shows_message(seeded_client) -> None:
+    """A lock to a project that does not exist is refused, not a crash."""
+    _post_student(seeded_client)
+
+    res = seeded_client.post(
+        "/fixed-assignments/new",
+        data={"student_id": "SX", "project_id": "P99"},
+        follow_redirects=True,
+    )
+
+    assert res.status_code == 200
+    assert b"Project &#39;P99&#39; does not exist" in res.data
+    assert repositories.FixedAssignmentRepository().list_all() == []
+
+
+def test_fixed_assignment_relock_says_lock_was_replaced(seeded_client) -> None:
+    """Locking a locked student again tells the user the old lock is gone."""
+    _post_student(seeded_client)
+    seeded_client.post(
+        "/fixed-assignments/new", data={"student_id": "SX", "project_id": "P1"}
+    )
+
+    res = seeded_client.post(
+        "/fixed-assignments/new",
+        data={"student_id": "SX", "project_id": "P2"},
+        follow_redirects=True,
+    )
+
+    assert b"was locked to Project P1 and is now locked to Project P2" in (
+        res.data
+    )
+    locks = repositories.FixedAssignmentRepository().list_all()
+    assert [(f.student_id, f.project_id) for f in locks] == [("SX", "P2")]
+
+
+@pytest.mark.parametrize(
+    ("scenario", "reason"),
+    [
+        ("infeasible", b"Insufficient overall capacity"),
+        ("conflicting", b"exceed its maximum capacity"),
+    ],
+)
+def test_failed_run_lists_each_reason_once_and_says_what_to_change(
+    real_engine_client, scenario: str, reason: bytes
+) -> None:
+    """A failed run shows every reason once and points to the fix pages."""
+    real_engine_client.post(f"/load-scenario/{scenario}")
+
+    res = real_engine_client.post(
+        "/runs/trigger",
+        data={"primary_strategy": "PREFERENCE", "max_alternatives": 2},
+        follow_redirects=True,
+    )
+
+    assert res.status_code == 200
+    assert res.data.count(reason) == 1
+    assert b"What to change:" in res.data
+    assert b'href="/projects"' in res.data
+    assert b'href="/fixed-assignments"' in res.data
