@@ -31,6 +31,16 @@
       {% if run.diagnostics.get('message') %}
         <p style="color: var(--text-main); margin-bottom: 0.5rem;"><strong>{{ run.diagnostics.get('message') }}</strong></p>
       {% endif %}
+      {# Reasons, errors, warnings and notes can name students (for example
+         "Student 'Alice Chen' (S01) has submitted no ranked preferences"), so
+         the Student Viewer only learns that they exist. #}
+      {% if not can_view_records %}
+        {% if run.diagnostics.get('reasons') or run.diagnostics.get('errors') or run.diagnostics.get('warnings') or run.diagnostics.get('notes') %}
+          <p style="color: var(--text-muted); font-size: 0.88rem;">
+            Detailed diagnostics are hidden for this role because they can name individual students.
+          </p>
+        {% endif %}
+      {% else %}
       {% if run.diagnostics.get('reasons') %}
         <ul style="color: var(--danger); margin-left: 1.5rem; margin-bottom: 0.5rem;">
           {% for r in run.diagnostics.get('reasons') %}
@@ -59,6 +69,7 @@
         <p style="color: var(--text-muted); font-size: 0.88rem; margin-top: 0.4rem;">
           {{ run.diagnostics.get('notes') }}
         </p>
+      {% endif %}
       {% endif %}
     </div>
 

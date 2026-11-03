@@ -1841,3 +1841,289 @@ def test_lock_controls_shown_only_to_lock_roles(
         sees_lock_controls
     )
     assert ("/lock-and-rerun" in solution_page) is sees_lock_controls
+
+
+# -----------------------------------------------------------------------------
+# Teacher's role rules (docs/architecture.md, section 6): only the Admin
+# switches roles, the Student Viewer sees summaries only, and form pages
+# open only for roles that can save them.
+# -----------------------------------------------------------------------------
+
+# GET pages that list individual student records.
+STUDENT_RECORD_PAGES = ["/students", "/preferences", "/fixed-assignments"]
+
+# GET form pages, with the page a refused role lands on, per role.
+FORM_PAGES = [
+    ("/students/new", {"COORDINATOR": "/students", "STUDENT": "/"}),
+    ("/students/S01/edit", {"COORDINATOR": "/students", "STUDENT": "/"}),
+    ("/projects/new", {"COORDINATOR": "/projects", "STUDENT": "/projects"}),
+    ("/projects/P1/edit", {"COORDINATOR": "/projects", "STUDENT": "/projects"}),
+]
+
+
+def _active_role(client: Any) -> str:
+    """Returns the role saved in the test client's session.
+
+    Args:
+        client: Flask test client.
+
+    Returns:
+        The active role; the app treats a missing value as Admin.
+    """
+    with client.session_transaction() as session:
+        return session.get("user_role", "ADMIN")
+
+
+def _student_identifiers() -> list[str]:
+    """Returns every student's display name and ID in the database."""
+    students = repositories.StudentRepository().list_all()
+    return [s.display_name for s in students] + [s.id for s in students]
+
+
+def _summary_pages() -> dict[str, str]:
+    """Returns the pages a Student Viewer may open, by short name.
+
+    Returns:
+        Dashboard, catalog pages and every page of the run saved by
+        `standard_client`, including the comparison of its two solutions.
+    """
+    run = repositories.RunRepository().list_runs()[0]
+    sol_a, sol_b = run.solutions[0].id, run.solutions[1].id
+    return {
+        "dashboard": "/",
+        "projects": "/projects",
+        "skills": "/skills",
+        "scenarios": "/scenarios",
+        "run": f"/runs/{run.id}",
+        "solution": f"/solutions/{sol_a}",
+        "compare": f"/compare?sol1={sol_a}&sol2={sol_b}",
+        "recommendations": f"/recommendations/{run.id}",
+    }
+
+
+@pytest.mark.parametrize(
+    ("current", "requested"),
+    [
+        ("COORDINATOR", "STUDENT"),
+        ("STUDENT", "COORDINATOR"),
+    ],
+)
+def test_non_admin_cannot_switch_to_another_role(
+    standard_client, current: str, requested: str
+) -> None:
+    """Only the Admin switches active roles; the role stays the same."""
+    _switch_role(standard_client, current)
+
+    res = standard_client.post(
+        "/set-role", data={"role": requested}, follow_redirects=True
+    )
+
+    assert res.status_code == 200
+    assert PERMISSION_DENIED in res.data
+    assert _active_role(standard_client) == current
+
+
+@pytest.mark.parametrize("role", ["COORDINATOR", "STUDENT"])
+def test_every_role_can_return_to_admin(standard_client, role: str) -> None:
+    """Without a login, returning to Admin is the way out of a role."""
+    _switch_role(standard_client, role)
+
+    res = standard_client.post(
+        "/set-role", data={"role": "ADMIN"}, follow_redirects=True
+    )
+
+    assert res.status_code == 200
+    assert b"Switched role to Administrator" in res.data
+    assert _active_role(standard_client) == "ADMIN"
+
+
+@pytest.mark.parametrize(
+    ("role", "sees_dropdown"),
+    [("ADMIN", True), ("COORDINATOR", False), ("STUDENT", False)],
+)
+def test_role_dropdown_shown_only_to_admin(
+    standard_client, role: str, sees_dropdown: bool
+) -> None:
+    """The Admin gets the role list; other roles get a way back to Admin."""
+    _switch_role(standard_client, role)
+
+    page = standard_client.get("/").get_data(as_text=True)
+
+    assert ('id="roleSelect"' in page) is sees_dropdown
+    assert ("Return to Administrator</button>" in page) is not sees_dropdown
+
+
+@pytest.mark.parametrize("path", STUDENT_RECORD_PAGES)
+def test_student_viewer_cannot_open_student_record_pages(
+    standard_client, path: str
+) -> None:
+    """Pages with names, rankings or locks send the Student Viewer away."""
+    _switch_role(standard_client, "STUDENT")
+
+    res = standard_client.get(path, follow_redirects=True)
+
+    assert res.status_code == 200
+    assert res.request.path == "/"
+    assert res.data.count(PERMISSION_DENIED) == 1
+    page = res.get_data(as_text=True)
+    assert not [i for i in _student_identifiers() if i in page]
+
+
+@pytest.mark.parametrize("path", STUDENT_RECORD_PAGES)
+def test_coordinator_can_open_student_record_pages(
+    standard_client, path: str
+) -> None:
+    """Control: the Coordinator still reads every student record page."""
+    _switch_role(standard_client, "COORDINATOR")
+
+    res = standard_client.get(path)
+
+    assert res.status_code == 200
+    assert PERMISSION_DENIED not in res.data
+    page = res.get_data(as_text=True)
+    assert [i for i in _student_identifiers() if i in page]
+
+
+@pytest.mark.parametrize(
+    ("role", "sees_links"),
+    [("ADMIN", True), ("COORDINATOR", True), ("STUDENT", False)],
+)
+def test_links_to_student_record_pages_follow_role(
+    standard_client, role: str, sees_links: bool
+) -> None:
+    """Nav bar and dashboard link to record pages only for allowed roles."""
+    _switch_role(standard_client, role)
+
+    page = standard_client.get("/").get_data(as_text=True)
+
+    for path in STUDENT_RECORD_PAGES:
+        assert (f'href="{path}"' in page) is sees_links
+
+
+@pytest.mark.parametrize(
+    "page_name",
+    [
+        "dashboard",
+        "projects",
+        "skills",
+        "scenarios",
+        "run",
+        "solution",
+        "compare",
+        "recommendations",
+    ],
+)
+def test_student_viewer_summary_pages_show_no_student_identities(
+    standard_client, page_name: str
+) -> None:
+    """Pages a Student Viewer can open show no student names or IDs."""
+    path = _summary_pages()[page_name]
+    _switch_role(standard_client, "STUDENT")
+
+    res = standard_client.get(path)
+
+    assert res.status_code == 200
+    assert PERMISSION_DENIED not in res.data
+    page = res.get_data(as_text=True)
+    assert not [i for i in _student_identifiers() if i in page]
+
+
+@pytest.mark.parametrize("page_name", ["solution", "compare"])
+def test_coordinator_sees_individual_allocations(
+    standard_client, page_name: str
+) -> None:
+    """Control: solution and compare pages still name students for staff."""
+    path = _summary_pages()[page_name]
+    _switch_role(standard_client, "COORDINATOR")
+
+    page = standard_client.get(path).get_data(as_text=True)
+
+    assert [i for i in _student_identifiers() if i in page]
+
+
+@pytest.mark.parametrize("role", ["COORDINATOR", "STUDENT"])
+def test_run_diagnostics_naming_students_follow_role(
+    real_engine_client, role: str
+) -> None:
+    """A run warning that names a student is hidden from the Student Viewer."""
+    real_engine_client.post("/load-scenario/standard", follow_redirects=True)
+    repositories.StudentRepository().save(
+        models.Student(id="S_NOPREF", display_name="Quinn Nopref")
+    )
+    run = _run_engine(real_engine_client)
+    assert any("Quinn Nopref" in w for w in run.diagnostics["warnings"])
+    _switch_role(real_engine_client, role)
+
+    run_page = real_engine_client.get(f"/runs/{run.id}").get_data(as_text=True)
+    solution_page = real_engine_client.get(
+        f"/solutions/{run.solutions[0].id}"
+    ).get_data(as_text=True)
+
+    sees_names = role == "COORDINATOR"
+    assert ("Quinn Nopref" in run_page) is sees_names
+    assert ("Quinn Nopref" in solution_page) is sees_names
+
+
+@pytest.mark.parametrize("role", ["COORDINATOR", "STUDENT"])
+@pytest.mark.parametrize(
+    ("path", "landing"), FORM_PAGES, ids=[path for path, _ in FORM_PAGES]
+)
+def test_form_pages_refused_without_edit_right(
+    standard_client, role: str, path: str, landing: dict[str, str]
+) -> None:
+    """A role that cannot save a form cannot open it either."""
+    _switch_role(standard_client, role)
+
+    res = standard_client.get(path, follow_redirects=True)
+
+    assert res.status_code == 200
+    assert res.request.path == landing[role]
+    assert res.data.count(PERMISSION_DENIED) == 1
+
+
+@pytest.mark.parametrize(
+    ("role", "list_pages"),
+    [
+        ("COORDINATOR", ["/students", "/projects"]),
+        ("STUDENT", ["/projects"]),
+    ],
+)
+def test_links_to_form_pages_hidden_without_edit_right(
+    standard_client, role: str, list_pages: list[str]
+) -> None:
+    """List pages a role can open show no links to forms it cannot open."""
+    _switch_role(standard_client, role)
+
+    for list_page in list_pages:
+        page = standard_client.get(list_page).get_data(as_text=True)
+        for path, _ in FORM_PAGES:
+            assert f'href="{path}"' not in page, (list_page, path)
+
+
+@pytest.mark.parametrize("path", [path for path, _ in FORM_PAGES])
+def test_admin_can_open_form_pages(standard_client, path: str) -> None:
+    """Control: the Admin still opens every form page."""
+    _switch_role(standard_client, "ADMIN")
+
+    res = standard_client.get(path, follow_redirects=True)
+
+    assert res.status_code == 200
+    assert res.request.path == path
+    assert PERMISSION_DENIED not in res.data
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/students/new", "/students/S01/delete", "/fixed-assignments/new"],
+)
+def test_student_viewer_refusal_lands_on_dashboard_once(
+    standard_client, path: str
+) -> None:
+    """A refused POST does not send the Student Viewer to a second refusal."""
+    _switch_role(standard_client, "STUDENT")
+
+    res = standard_client.post(path, data={}, follow_redirects=True)
+
+    assert res.status_code == 200
+    assert res.request.path == "/"
+    assert res.data.count(PERMISSION_DENIED) == 1

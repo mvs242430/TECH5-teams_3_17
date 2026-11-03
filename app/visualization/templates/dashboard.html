@@ -7,8 +7,10 @@
   <div class="kpi-card">
     <span class="kpi-label">Student Cohort</span>
     <span class="kpi-value">{{ student_count }}</span>
+    {% if can_view_records %}
     <span class="kpi-sub"><a href="{{ url_for('visualization_web.list_students') }}">View & Edit Students
         &rarr;</a></span>
+    {% endif %}
   </div>
   <div class="kpi-card">
     <span class="kpi-label">Active Projects</span>
@@ -25,8 +27,10 @@
   <div class="kpi-card">
     <span class="kpi-label">Fixed Locks</span>
     <span class="kpi-value">{{ fixed_count }}</span>
+    {% if can_view_records %}
     <span class="kpi-sub"><a href="{{ url_for('visualization_web.list_fixed_assignments') }}">Manage Pre-allocations
         &rarr;</a></span>
+    {% endif %}
   </div>
 </div>
 
@@ -70,7 +74,7 @@
       {% else %}
       <div class="alert alert-warning">
         Current role (<strong>{{ current_role }}</strong>) does not have permission to launch new optimization runs.
-        Switch role to Administrator or Programme Coordinator in the top right.
+        Return to Administrator in the top right.
       </div>
       {% endif %}
     </div>
@@ -113,7 +117,7 @@
       {% else %}
       <div class="alert alert-warning">
         Current role (<strong>{{ current_role }}</strong>) does not have permission to load benchmark scenarios, because
-        loading replaces all cohort data. Switch role to Administrator in the top right.
+        loading replaces all cohort data. Return to Administrator in the top right.
       </div>
       {% endif %}
     </div>

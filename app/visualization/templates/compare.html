@@ -160,6 +160,12 @@
       <h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 1rem;">
         Detailed Allocation Shifts ({{ comparison.changed_students_count }} students changed)
       </h3>
+      {% if not can_view_records %}
+      {# Student Viewer: high-level summaries only (docs/architecture.md §6) #}
+      <p style="color: var(--text-muted);">
+        Individual students are hidden for this role. The indicators and findings above cover the whole cohort.
+      </p>
+      {% else %}
       <div class="table-responsive">
         <table class="data-table">
           <thead>
@@ -194,6 +200,7 @@
           </tbody>
         </table>
       </div>
+      {% endif %}
     {% elif not comparison and sol_a and sol_b %}
       <p style="color: var(--text-muted); text-align: center; padding: 2rem;">
         Comparison data not available for the selected solutions.

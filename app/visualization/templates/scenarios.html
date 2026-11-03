@@ -13,7 +13,7 @@
 {% if not can_edit %}
 <div class="alert alert-warning">
   Current role (<strong>{{ current_role }}</strong>) can read these scenarios but cannot load them or reset the
-  database, because both replace all cohort data. Switch role to Administrator in the top right.
+  database, because both replace all cohort data. Return to Administrator in the top right.
 </div>
 {% endif %}
 
@@ -46,7 +46,13 @@
     </div>
     <div class="card-body">
       <p style="color: #334155; margin-bottom: 1rem;">
-        Standard cohort with student <strong>S02</strong> locked to Project <strong>P2</strong> (Cloud Data Pipeline) under a formal fellowship grant. Demonstrates strict preservation across all solutions and illustrates how fixing one student impacts outcomes for others.
+        {# The student ID and the lock reason are individual student data #}
+        {% if can_view_records %}
+        Standard cohort with student <strong>S02</strong> locked to Project <strong>P2</strong> (Cloud Data Pipeline) under a formal fellowship grant.
+        {% else %}
+        Standard cohort with one student locked to Project <strong>P2</strong> (Cloud Data Pipeline).
+        {% endif %}
+        Demonstrates strict preservation across all solutions and illustrates how fixing one student impacts outcomes for others.
       </p>
       {% if can_edit %}
       <form action="{{ url_for('visualization_web.load_scenario', scenario_name='fixed') }}" method="POST">
