@@ -45,10 +45,6 @@
          style="text-decoration: none;">
         <span class="kpi-label">{{ rec.priority_focus }}</span>
         <span class="kpi-value" style="font-size: 1.4rem;">Alt #{{ rec.recommended_alternative_number }}</span>
-        <span class="kpi-sub">
-          <a href="{{ url_for('visualization_web.view_solution', solution_id=rec.recommended_solution_id) }}"
-             style="color: var(--primary); font-weight: 600;">View solution &rarr;</a>
-        </span>
       </a>
     {% endfor %}
   </div>
