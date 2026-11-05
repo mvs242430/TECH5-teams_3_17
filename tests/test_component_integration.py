@@ -138,3 +138,26 @@ def test_infeasible_cohort_integration(tmp_path: pathlib.Path) -> None:
     assert len(runs) == 1
     assert runs[0].status == "INFEASIBLE"
     assert runs[0].diagnostics
+
+
+def test_infeasible_run_lists_each_diagnostic_once(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Each infeasibility reason appears once in the diagnostics panel.
+
+    The validator stores a proof under both ``reasons`` and ``errors``; the
+    Solutions page must not print it twice.
+    """
+    db_file = tmp_path / "test_infeasible_dedupe.db"
+    app = create_app({"TESTING": True, "DATABASE_PATH": db_file})
+    client = app.test_client()
+
+    client.post("/load-scenario/infeasible", follow_redirects=True)
+    run_res = client.post(
+        "/runs/trigger",
+        data={"primary_strategy": "PREFERENCE", "max_alternatives": 2},
+        follow_redirects=True,
+    )
+
+    assert run_res.status_code == 200
+    assert run_res.data.count(b"Insufficient overall capacity") == 1

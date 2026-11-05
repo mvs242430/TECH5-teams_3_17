@@ -106,16 +106,22 @@
             </p>
           {% endif %}
         {% else %}
-          {% if selected_run.diagnostics.get('reasons') %}
+          {# The validator records each infeasibility proof under both
+             ``reasons`` and ``errors``, so an error already shown as a reason
+             is skipped to list every message once. #}
+          {% set diag_reasons = selected_run.diagnostics.get('reasons') or [] %}
+          {% set extra_errors = (selected_run.diagnostics.get('errors') or [])
+                                | reject('in', diag_reasons) | list %}
+          {% if diag_reasons %}
             <ul style="color: var(--danger); margin-left: 1.5rem; margin-bottom: 0.5rem;">
-              {% for r in selected_run.diagnostics.get('reasons') %}
+              {% for r in diag_reasons %}
                 <li>{{ r }}</li>
               {% endfor %}
             </ul>
           {% endif %}
-          {% if selected_run.diagnostics.get('errors') %}
+          {% if extra_errors %}
             <ul style="color: var(--danger); margin-left: 1.5rem; margin-bottom: 0.5rem;">
-              {% for err in selected_run.diagnostics.get('errors') %}
+              {% for err in extra_errors %}
                 <li>{{ err }}</li>
               {% endfor %}
             </ul>
