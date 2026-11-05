@@ -501,3 +501,64 @@ def test_edge_case_15_duplicate_avoidance_no_good_cuts() -> None:
         (a.student_id, a.project_id) for a in run.solutions[1].assignments
     }
     assert sol1_alloc != sol2_alloc
+
+
+def test_broken_and_infeasible_input_reports_invalid_input(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Structural errors win over infeasibility in the run status.
+
+    Two students for one seat is infeasible, and the lock on unknown student
+    'S9' is broken input. The run must say INVALID_INPUT so the coordinator
+    fixes the data first, and it must still list both problems.
+    """
+    projects = [
+        models.Project(id="P1", title="P1", min_capacity=0, max_capacity=1)
+    ]
+    students = [
+        models.Student(id="S1", display_name="S1"),
+        models.Student(id="S2", display_name="S2"),
+    ]
+    fixed = [models.FixedAssignment(student_id="S9", project_id="P1")]
+
+    run = _engine(tmp_path).run_assignment(
+        students, projects, fixed_assignments=fixed, max_alternatives=1
+    )
+
+    assert run.status == "INVALID_INPUT"
+    assert run.solutions == []
+    errors = run.diagnostics["errors"]
+    assert any("unknown student 'S9'" in err for err in errors)
+    assert any("Insufficient overall capacity" in err for err in errors)
+
+
+def test_fixed_locks_over_capacity_run_stays_infeasible(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Too many locks on one project is infeasible, not invalid input.
+
+    The data is well formed (every ID exists), but the locks cannot all hold
+    at once, so the validator proves infeasibility before the solver runs.
+    """
+    projects = [
+        models.Project(id="P1", title="P1", min_capacity=0, max_capacity=1),
+        models.Project(id="P2", title="P2", min_capacity=0, max_capacity=2),
+    ]
+    students = [
+        models.Student(id="S1", display_name="S1"),
+        models.Student(id="S2", display_name="S2"),
+    ]
+    fixed = [
+        models.FixedAssignment(student_id="S1", project_id="P1"),
+        models.FixedAssignment(student_id="S2", project_id="P1"),
+    ]
+
+    run = _engine(tmp_path).run_assignment(
+        students, projects, fixed_assignments=fixed, max_alternatives=1
+    )
+
+    assert run.status == "INFEASIBLE"
+    assert any(
+        "exceed its maximum capacity" in reason
+        for reason in run.diagnostics["reasons"]
+    )

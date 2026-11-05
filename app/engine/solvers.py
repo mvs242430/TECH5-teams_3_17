@@ -189,8 +189,20 @@ class AssignmentEngine(contract.AssignmentEngineContract):
 
         val_outcome = self.validate_inputs(request)
 
-        # Case A: Pre-solver mathematical infeasibility (e.g., capacity deficit).
-        if not val_outcome.is_feasible:
+        # The validator also copies every infeasibility reason into ``errors``,
+        # so the errors that are not reasons are the structural ones (unknown
+        # or duplicate IDs, a student locked to two projects). Broken input is
+        # reported as INVALID_INPUT even when it is also infeasible, because a
+        # capacity or skill proof on broken data means little.
+        structural_errors = [
+            err
+            for err in val_outcome.errors
+            if err not in val_outcome.infeasibility_reasons
+        ]
+
+        # Case A: Pre-solver mathematical infeasibility (e.g., capacity deficit)
+        # on otherwise well-formed input.
+        if not val_outcome.is_feasible and not structural_errors:
             reasons = list(val_outcome.infeasibility_reasons)
             if not reasons and val_outcome.errors:
                 reasons = list(val_outcome.errors)
