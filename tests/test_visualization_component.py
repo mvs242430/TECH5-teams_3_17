@@ -2590,3 +2590,34 @@ def test_compare_single_alternative_run_preselects_without_crashing(
     page = res.get_data(as_text=True)
     assert _selected_option_value(page, "sol1") == only_sol.id
     assert "Only one active solution alternative is available" in page
+
+
+# -----------------------------------------------------------------------------
+# Issue A2.2.2 - Recommendations top summary strip: cards only without view link
+# -----------------------------------------------------------------------------
+
+
+def test_recommendations_top_summary_strip_has_cards_only(
+    real_engine_client,
+) -> None:
+    """Top KPI strip renders only anchor cards without nested view links."""
+    run = _load_and_run(real_engine_client)
+
+    res = real_engine_client.get(f"/recommendations/{run.id}")
+
+    assert res.status_code == 200
+    page = res.get_data(as_text=True)
+    kpi_grid = page.split('<div class="kpi-grid"', maxsplit=1)[1].split(
+        "</div>", maxsplit=1
+    )[0]
+
+    assert kpi_grid.count("kpi-card") == 3
+    assert 'href="#rec-1"' in kpi_grid
+    assert 'href="#rec-2"' in kpi_grid
+    assert 'href="#rec-3"' in kpi_grid
+    assert kpi_grid.count("<a ") == 3
+    assert kpi_grid.count("</a>") == 3
+    assert "View solution" not in kpi_grid
+    assert "/solutions/" not in kpi_grid
+    assert "View Solution #" in page
+    assert "Compare vs Alt #" in page
